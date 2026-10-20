@@ -21,6 +21,8 @@ jobs:
       - run: npm test
       - name: Install official video tools
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: ./scripts/Install-VideoTools.ps1
       - run: dotnet run --project tests/Fastdown.Tests/Fastdown.Tests.csproj -c Release -- --video-suite
       - name: Prepare native bridge for isolated browser tests

@@ -6,13 +6,16 @@ $destination = if ($ApplicationDirectory) { Join-Path ([IO.Path]::GetFullPath($A
 $cache = Join-Path $projectRoot '.test-data\video-tools'
 New-Item -ItemType Directory -Force -Path $destination,$cache | Out-Null
 $headers = @{'User-Agent'='Fastdown-video-tools'}
+$apiHeaders = @{'User-Agent'='Fastdown-video-tools'; Accept='application/vnd.github+json'}
+# CI runners share outbound IPs. Use the job's read-only token only for GitHub API metadata.
+if ($env:GH_TOKEN) { $apiHeaders.Authorization = 'Bearer ' + $env:GH_TOKEN }
 $records = @()
 foreach ($spec in @(
     @{Repo='yt-dlp/yt-dlp';Asset='yt-dlp.exe'},
     @{Repo='yt-dlp/FFmpeg-Builds';Asset='ffmpeg-master-latest-win64-gpl.zip'},
     @{Repo='denoland/deno';Asset='deno-x86_64-pc-windows-msvc.zip'}
 )) {
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$($spec.Repo)/releases/latest" -Headers $headers
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$($spec.Repo)/releases/latest" -Headers $apiHeaders
     $asset = $release.assets | Where-Object name -EQ $spec.Asset | Select-Object -First 1
     if (!$asset -or $asset.digest -notmatch '^sha256:([a-f0-9]{64})$') { throw 'Resmi SHA-256 bilgisi bulunamadi.' }
     $expected = $Matches[1]
