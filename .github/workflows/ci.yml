@@ -1,0 +1,36 @@
+name: Test
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: dotnet build src/Fastdown.App/Fastdown.App.csproj -c Release
+      - run: npm test
+      - name: Install official video tools
+        shell: pwsh
+        run: ./scripts/Install-VideoTools.ps1
+      - run: dotnet run --project tests/Fastdown.Tests/Fastdown.Tests.csproj -c Release -- --video-suite
+      - name: Prepare native bridge for isolated browser tests
+        shell: pwsh
+        run: |
+          dotnet publish src/Fastdown.App/Fastdown.App.csproj -c Release --self-contained false -o Fastdown
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet publish src/Fastdown.BrowserHost/Fastdown.BrowserHost.csproj -c Release --self-contained false -o Fastdown
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./Fastdown/Fastdown.BrowserHost.exe --register
+      - run: node tests/browser/e2e.mjs
+      - run: node tests/browser/overlay-e2e.mjs
+      - run: node tests/browser/filter-e2e.mjs

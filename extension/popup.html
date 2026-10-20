@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="popup.css"><title>Akış</title></head>
+<body>
+  <header><img src="icons/48.png" width="36" height="36" alt=""><div><h1>akış <span>TARAYICI BAĞLANTISI</span></h1><p>Gördüğünü indir. Akış'a bırak.</p></div></header>
+  <div id="connection" class="connection" role="status">Masaüstü bağlantısı kontrol ediliyor…</div>
+  <section class="settings"><label><span>İndirmeleri otomatik yakala<small>Tarayıcı indirmelerini Akış'a aktar</small></span><input type="checkbox" id="capture"></label><label><span>Medya üstünde düğme göster<small>Video ve resimlerin üzerinde</small></span><input type="checkbox" id="overlays"></label></section>
+  <details id="overlay-preferences" class="overlay-preferences">
+    <summary>Sayfa / site için düğmeleri gizle</summary>
+    <label><span>Bu sayfada gösterme<small id="overlay-page-address"></small></span><input type="checkbox" id="hide-page"></label>
+    <label><span>Bu sitede gösterme<small id="overlay-site-address"></small></span><input type="checkbox" id="hide-site"></label>
+    <p class="quality-help">Bu seçimler kalıcıdır. Medya yanındaki × ise yalnızca o medyayı sayfa yenilenene kadar gizler.</p>
+    <b class="rules-title">Gizlenen sayfa ve siteler <span id="overlay-rule-count"></span></b>
+    <div id="overlay-rule-list" class="rule-list"></div>
+  </details>
+  <div class="section-title"><h2>Bu sayfadaki medya</h2><button id="refresh" class="quiet" title="Listeyi yenile">↻ Yenile</button></div>
+  <nav id="filters"><button data-kind="all" class="selected">Tümü</button><button data-kind="video">Video</button><button data-kind="image">Resim</button><button data-kind="audio">Ses</button></nav>
+  <div id="quality-controls" hidden><label class="quality-filter" for="quality"><span>Video kalitesi</span><select id="quality"><option value="all">Tüm kaliteler</option></select></label><p class="quality-help">Kaynak listelerindeki oynatılmamış sürümler de taranır. Yeni seçenekler için Yenile'ye bas.</p></div>
+  <section id="page-video" class="page-video" hidden>
+    <b id="video-title">Bu sayfadaki videoyu indir</b>
+    <p class="quality-help">YouTube ve desteklenen siteler · Video veya sadece ses</p>
+    <button id="inspect-video">Kaliteleri getir</button>
+    <label class="format-label">İndirme biçimi<select id="page-format" aria-label="İndirme biçimi"><option value="mp4">MP4 · Video + ses</option><option value="mkv">MKV · Video + ses</option><option value="mp3">MP3 · Sadece ses</option><option value="m4a">M4A · Sadece ses</option></select></label>
+    <div id="video-options" hidden><select id="page-quality" aria-label="İndirilecek video kalitesi"></select><button id="download-video">Videoyu indir ↓</button></div>
+  </section>
+  <details class="media-filter-settings"><summary>Küçük / kısa medya filtresi</summary><label><span>Medya filtresi açık</span><input id="media-filter-enabled" type="checkbox"></label><div class="thresholds"><label>En az KB<input id="media-filter-kb" type="number" min="0" max="102400" step="1"></label><label>En az saniye<input id="media-filter-seconds" type="number" min="0" max="3600" step="1"></label><label>Resim kenarı (px)<input id="media-filter-edge" type="number" min="0" max="4096" step="1"></label></div><p class="quality-help">Bilgisi bilinmeyen medya gösterilir. Filtrelenen dosyaları aşağıdaki seçenekle yine indirebilirsin.</p></details>
+  <label class="show-filtered"><span>Filtrelenenleri göster <small id="filtered-count"></small></span><input id="show-filtered" type="checkbox"></label>
+  <main id="media"><p class="empty">Medya aranıyor…</p></main>
+  <div class="manual"><input id="url" type="url" placeholder="Dosya veya YouTube bağlantısı…" aria-label="İndirme bağlantısı"><button id="download" title="Bağlantıyı Akış ile indir">↓</button></div>
+  <p id="feedback" role="status"></p>
+  <details><summary>Bağlantı kurulamıyorsa</summary><p>Uygulama paketindeki <b>Eklenti-Kur.cmd</b> dosyasını bir kez çalıştır. Sonra buradaki bağlantıyı yeniden kontrol et. Eklenti yüklendikten önce açık olan sayfaları yenile.</p><button id="retry" class="quiet">Bağlantıyı kontrol et</button></details>
+  <footer>Akış eklentisi 1.6 <span>MP4 · MKV · MP3 · M4A</span></footer>
+  <script type="module" src="popup.js"></script>
+</body></html>

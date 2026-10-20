@@ -1,0 +1,11 @@
+{
+  "name": "fastdown-development",
+  "version": "1.6.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/browser/extension.test.mjs tests/browser/discovery.test.mjs",
+    "test:overlays": "node tests/browser/overlay-e2e.mjs",
+    "test:browser": "node tests/browser/e2e.mjs"
+  },
+  "devDependencies": { "playwright": "1.62.1" }
+}

@@ -1,0 +1,25 @@
+name: Portable Windows package
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build standalone package with video tools
+        shell: pwsh
+        run: ./scripts/Build-Release.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fastdown-Windows-x64
+          path: |
+            artifacts/Fastdown-Windows-x64.zip
+            artifacts/Fastdown-Windows-x64.zip.sha256
+          compression-level: 0
+          retention-days: 14

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Fastdown · Tarayıcı bağlantısı",
+  "version": "1.6.0",
+  "description": "İndirmeleri Fastdown'a aktarır; video ve resimlerin üzerinde indirme düğmesi gösterir.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnR0ERyA5xdrpRoVDtlhsg6ZjdkzOi9bIcI4atkrEpjucb50mpiDLDMKe1DfESprFWgd/kh46BCBZSXH68VwDU9ngFqbgGEUfm9VC0tx43DBzvfn6S35dso9ZGGjvvfZCZdFhyASxgcatZ5Hmgd/vacuBea+Q1saNLWM1DcAI6A6qJbyCfc/gAKjVD4JBa8GYiPPXyRYUNacrQWHgpB45VaSo2HqWVF/d+ad6mcCUhPQ08OD+eP6G6W4TJfn+25ORujSwsjpDXAz+896NN6Eln3u6hEWpBciO3Qf84oGWV8NWQJwV4DOxX8hzbZU7mWCWB06KqnVdxMyBhh6nXES6VwIDAQAB",
+  "minimum_chrome_version": "120",
+  "permissions": ["downloads", "nativeMessaging", "contextMenus", "storage", "webRequest", "activeTab"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "Fastdown ile indir", "default_popup": "popup.html", "default_icon": { "48": "icons/48.png", "128": "icons/128.png" } },
+  "icons": { "48": "icons/48.png", "128": "icons/128.png" },
+  "content_scripts": [
+    { "matches": ["http://*/*", "https://*/*"], "js": ["source-parser.js", "page-observer.js"], "run_at": "document_start", "world": "MAIN", "all_frames": true },
+    { "matches": ["http://*/*", "https://*/*"], "js": ["media-quality.js", "source-parser.js", "video-page.js", "overlay-rules.js", "media-filter.js", "content.js"], "run_at": "document_idle", "all_frames": true }
+  ]
+}
