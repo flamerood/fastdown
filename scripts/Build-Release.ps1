@@ -1,6 +1,7 @@
 param(
     [ValidateSet('win-x64')][string]$Runtime = 'win-x64',
-    [switch]$SkipVideoTools
+    [switch]$SkipVideoTools,
+    [switch]$SkipSetup
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -17,7 +18,7 @@ foreach ($project in @('src/Fastdown.App/Fastdown.App.csproj','src/Fastdown.Brow
 Copy-Item -LiteralPath (Join-Path $projectRoot 'extension') -Destination $package -Recurse
 New-Item -ItemType Directory -Path (Join-Path $package 'scripts') | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-VideoTools.ps1') -Destination (Join-Path $package 'scripts')
-foreach ($file in @('Baslat.cmd','Eklenti-Kur.cmd','Eklenti-Kaldir.cmd','Video-Araclarini-Guncelle.cmd','README.md','VIDEO-TOOLS.md','KURULUM.md','LICENSE')) {
+foreach ($file in @('Baslat.cmd','Eklenti-Kur.cmd','Eklenti-Kaldir.cmd','Video-Araclarini-Guncelle.cmd','README.md','VIDEO-TOOLS.md','KURULUM.md','Kurulum-Rehberi.html','LICENSE')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination $package
 }
 if (!$SkipVideoTools) {
@@ -31,3 +32,4 @@ Compress-Archive -LiteralPath $package -DestinationPath $archive -CompressionLev
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  Fastdown-Windows-x64.zip" | Set-Content -LiteralPath ($archive + '.sha256') -Encoding ASCII
 Write-Host "Hazir: $archive"
+if (!$SkipSetup) { & (Join-Path $PSScriptRoot 'Build-Setup.ps1') -PackageDirectory $package }

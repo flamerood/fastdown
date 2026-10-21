@@ -18,15 +18,18 @@ public sealed class DownloadManager : IAsyncDisposable
     private readonly Timer _timer;
     private readonly DownloadEngine _engine;
     private readonly VideoDownloader _video;
+    private readonly bool _schedulerEnabled;
     private bool _closing;
+    private bool _reconfiguring;
     private DateTime _lastSave = DateTime.UtcNow;
     private readonly Dictionary<Guid, (long Bytes, DateTime Time)> _samples = [];
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, IncludeFields = true, Converters = { new JsonStringEnumConverter() } };
     public DownloadSettings Settings { get; }
     public string? PersistenceError { get; private set; }
 
-    public DownloadManager(string dataDirectory, string? videoToolsDirectory = null)
+    public DownloadManager(string dataDirectory, string? videoToolsDirectory = null, bool schedulerEnabled = true)
     {
+        _schedulerEnabled = schedulerEnabled;
         Directory.CreateDirectory(dataDirectory);
         _libraryPath = Path.Combine(dataDirectory, "library.json");
         Library library;
@@ -42,11 +45,13 @@ public sealed class DownloadManager : IAsyncDisposable
         Settings = library.Settings;
         Settings.MaxConcurrent = Math.Clamp(Settings.MaxConcurrent, 1, 5);
         Settings.ConnectionsPerFile = Math.Clamp(Settings.ConnectionsPerFile, 1, 8);
-        Settings.SpeedLimitBytes = Math.Max(0, Settings.SpeedLimitBytes);
+        Settings.SpeedLimitBytes = Math.Clamp(Settings.SpeedLimitBytes, 0, 10_000_000L * 1024);
         if (!Enum.IsDefined(Settings.CompletionAction)) Settings.CompletionAction = CompletionAction.None;
         _jobs = library.Jobs;
+        if (_jobs.All(j => j.QueueOrder == 0)) for (var i = 0; i < _jobs.Count; i++) _jobs[i].QueueOrder = i + 1;
         foreach (var job in _jobs)
         {
+            job.SpeedLimitBytes = Math.Clamp(job.SpeedLimitBytes, 0, 10_000_000L * 1024);
             if (job.State is DownloadState.Downloading or DownloadState.Queued) job.State = DownloadState.Paused;
             job.BytesPerSecond = 0;
         }
@@ -56,8 +61,8 @@ public sealed class DownloadManager : IAsyncDisposable
             if (limit <= 0) return 0;
             lock (_gate)
             {
-                var videos = _jobs.Count(j => j.IsVideoPage && _running.ContainsKey(j.Id));
-                return Math.Max(1, limit - videos * Math.Max(1, limit / Settings.MaxConcurrent));
+                var reserved = _jobs.Where(j => j.IsVideoPage && _running.ContainsKey(j.Id)).Sum(EffectiveVideoLimit);
+                return Math.Max(1, limit - reserved);
             }
         });
         _video = new VideoDownloader(Path.Combine(dataDirectory, "video-parts"), videoToolsDirectory);
@@ -91,6 +96,7 @@ public sealed class DownloadManager : IAsyncDisposable
                 candidate = Path.GetFileNameWithoutExtension(safeName) + $" ({suffix++})" + Path.GetExtension(safeName);
             var job = new DownloadJob { Url = uri.AbsoluteUri, FileName = candidate, DirectoryPath = folder, State = startNow ? DownloadState.Queued : DownloadState.Paused, Referrer = referrer, BrowserRequestId = browserRequestId, IsVideoPage = isVideoPage, VideoHeight = videoHeight, VideoFormat = videoFormat };
             _jobs.Add(job);
+            job.QueueOrder = _jobs.Max(j => j.QueueOrder) + 1;
             SaveLocked();
             return job;
         }
@@ -148,6 +154,59 @@ public sealed class DownloadManager : IAsyncDisposable
 
     public Task<VideoInfo> InspectVideoAsync(string url, CancellationToken token) => _video.InspectAsync(url, token);
 
+    // Moving queued work never interrupts an active transfer.
+    public bool MoveQueued(DownloadJob job, DownloadJob? before)
+    {
+        lock (_gate)
+        {
+            if (_closing || job.State != DownloadState.Queued || !_jobs.Contains(job) || before == job || before != null && (before.State != DownloadState.Queued || !_jobs.Contains(before))) return false;
+            var queue = _jobs.Where(j => j.State == DownloadState.Queued).OrderBy(j => j.QueueOrder).ToList();
+            queue.Remove(job);
+            queue.Insert(before == null ? queue.Count : queue.IndexOf(before), job);
+            for (var i = 0; i < queue.Count; i++) queue[i].QueueOrder = i + 1;
+            SaveLocked(); return true;
+        }
+    }
+
+    public static void ValidateSpeedLimit(long bytes)
+    {
+        if (bytes < 0 || bytes > 10_000_000L * 1024 || bytes is > 0 and < 16 * 1024) throw new ArgumentException("Hız sınırını 0 veya 16–10000000 KB/sn aralığında gir.");
+    }
+
+    private long EffectiveVideoLimit(DownloadJob job)
+    {
+        var share = Settings.SpeedLimitBytes > 0 ? Math.Max(1, Settings.SpeedLimitBytes / Settings.MaxConcurrent) : 0;
+        return job.SpeedLimitBytes > 0 ? share > 0 ? Math.Min(share, job.SpeedLimitBytes) : job.SpeedLimitBytes : share;
+    }
+
+    public async Task SetJobSpeedLimitAsync(DownloadJob job, long bytes)
+    {
+        ValidateSpeedLimit(bytes);
+        bool restart;
+        lock (_gate) { if (_closing || !_jobs.Contains(job)) return; restart = job.IsVideoPage && _running.ContainsKey(job.Id); job.SpeedLimitBytes = bytes; }
+        if (restart) { await PauseAsync(job); Resume(job); }
+        lock (_gate) SaveLocked();
+    }
+
+    public async Task SetTransferSettingsAsync(long bytes, int concurrent, int connections)
+    {
+        ValidateSpeedLimit(bytes);
+        DownloadJob[] restart;
+        lock (_gate)
+        {
+            if (_closing) return;
+            _reconfiguring = true;
+            restart = bytes != Settings.SpeedLimitBytes || concurrent != Settings.MaxConcurrent ? _jobs.Where(j => j.IsVideoPage && _running.ContainsKey(j.Id)).ToArray() : [];
+        }
+        try
+        {
+            foreach (var job in restart) await PauseAsync(job);
+            lock (_gate) { Settings.SpeedLimitBytes = bytes; Settings.MaxConcurrent = Math.Clamp(concurrent, 1, 5); Settings.ConnectionsPerFile = Math.Clamp(connections, 1, 8); }
+            foreach (var job in restart) Resume(job);
+        }
+        finally { lock (_gate) { _reconfiguring = false; SaveLocked(); } }
+    }
+
     public void Resume(DownloadJob job)
     {
         lock (_gate)
@@ -204,8 +263,9 @@ public sealed class DownloadManager : IAsyncDisposable
                 else job.BytesPerSecond = 0;
                 _samples[job.Id] = (bytes, now);
             }
-            foreach (var job in _jobs.Where(j => j.State == DownloadState.Queued).ToArray())
+            foreach (var job in _jobs.Where(j => j.State == DownloadState.Queued).OrderBy(j => j.QueueOrder).ToArray())
             {
+                if (_reconfiguring || !_schedulerEnabled) break;
                 if (_running.Count >= Settings.MaxConcurrent) break;
                 if (_running.ContainsKey(job.Id)) continue;
                 job.State = DownloadState.Downloading;
@@ -221,7 +281,7 @@ public sealed class DownloadManager : IAsyncDisposable
     {
         try
         {
-            if (job.IsVideoPage) await _video.DownloadAsync(job, Settings.SpeedLimitBytes > 0 ? Math.Max(1, Settings.SpeedLimitBytes / Settings.MaxConcurrent) : 0, token);
+            if (job.IsVideoPage) await _video.DownloadAsync(job, EffectiveVideoLimit(job), token);
             else await _engine.DownloadAsync(job, Settings.ConnectionsPerFile, token);
             lock (_gate) { job.State = DownloadState.Completed; job.CompletedAt = DateTimeOffset.Now; job.Error = null; }
         }

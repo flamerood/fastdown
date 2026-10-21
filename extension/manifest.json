@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fastdown · Tarayıcı bağlantısı",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "İndirmeleri Fastdown'a aktarır; video ve resimlerin üzerinde indirme düğmesi gösterir.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnR0ERyA5xdrpRoVDtlhsg6ZjdkzOi9bIcI4atkrEpjucb50mpiDLDMKe1DfESprFWgd/kh46BCBZSXH68VwDU9ngFqbgGEUfm9VC0tx43DBzvfn6S35dso9ZGGjvvfZCZdFhyASxgcatZ5Hmgd/vacuBea+Q1saNLWM1DcAI6A6qJbyCfc/gAKjVD4JBa8GYiPPXyRYUNacrQWHgpB45VaSo2HqWVF/d+ad6mcCUhPQ08OD+eP6G6W4TJfn+25ORujSwsjpDXAz+896NN6Eln3u6hEWpBciO3Qf84oGWV8NWQJwV4DOxX8hzbZU7mWCWB06KqnVdxMyBhh6nXES6VwIDAQAB",
   "minimum_chrome_version": "120",

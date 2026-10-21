@@ -1,6 +1,10 @@
 # Başka bilgisayarda kurulum
 
-Windows 10/11 x64 içindir. GitHub'daki **Releases** bölümünden `Fastdown-Windows-x64.zip` paketini indir; kaynak kodu ZIP'i uygulama paketi değildir.
+Windows 10/11 x64 içindir. En kolay yol GitHub'daki **Releases** bölümünden **Fastdown-Setup.exe** dosyasını indirmek. Açıp kur; çalışma zamanı, video araçları ve tarayıcı köprüsü birlikte kurulur. Yönetici yetkisi gerekmez. Masaüstü veya Başlat menüsünden Fastdown'ı aç. Tarayıcı uzantısını bir kez kurulum sonunda açabileceğin rehbere göre ekle. Kaldırma Windows Ayarlar > Uygulamalar üzerinden yapılır; indirdiğin dosyalar ve kişisel geçmiş korunur.
+
+Otomatik güncelleme 1.7 ile başlar. Yeni sürüm indirilip doğrulanınca uygulamada **Kur ve yeniden başlat** görünür. Bu işlem açık indirmeleri duraklatıp kaydeder; güncellemeden sonra **Tümünü sürdür** kullanabilirsin. Otomatik kontrol/indirme Ayarlar'dan kapatılabilir. Kurulum dosyaları dijital olarak imzalı değildir; SHA-256 kayıtları sürüm sayfasındadır.
+
+Taşınabilir kullanım için **Fastdown-Windows-x64.zip** indir; kaynak kodu ZIP'i uygulama paketi değildir:
 
 1. ZIP'i tamamıyla kendi kullanıcının yazabildiği bir klasöre çıkar. ZIP'in içinden doğrudan çalıştırma. `Fastdown` ve `extension` klasörleri aynı üst klasörde kalsın.
 2. **Baslat.cmd** veya `Fastdown/Fastdown.exe` dosyasını aç. Taşınabilir pakette .NET çalışma zamanı bulunur; Python, Node.js veya .NET kurman gerekmez.

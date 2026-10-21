@@ -17,11 +17,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/Build-Release.ps1
+      - name: Test clean install, upgrade and uninstall
+        shell: pwsh
+        run: ./scripts/Test-Installer.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: Fastdown-Windows-x64
           path: |
             artifacts/Fastdown-Windows-x64.zip
             artifacts/Fastdown-Windows-x64.zip.sha256
+            artifacts/Fastdown-Setup.exe
+            artifacts/Fastdown-Setup.exe.sha256
           compression-level: 0
           retention-days: 14

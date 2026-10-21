@@ -24,6 +24,8 @@ public sealed class DownloadJob
     public bool IsVideoPage { get; set; }
     public int VideoHeight { get; set; }
     public string VideoFormat { get; set; } = "mkv";
+    public long QueueOrder { get; set; }
+    public long SpeedLimitBytes { get; set; }
     public long DownloadedBytes;
     [JsonIgnore] public string? Stage { get; set; }
     [JsonIgnore] public double BytesPerSecond { get; set; }
@@ -47,6 +49,7 @@ public sealed class DownloadSettings
     public long SpeedLimitBytes { get; set; }
     public bool NotifyOnComplete { get; set; } = true;
     public CompletionAction CompletionAction { get; set; }
+    public bool AutoUpdate { get; set; } = true;
 }
 
 public enum CompletionAction { None, OpenFolder, OpenDocument }

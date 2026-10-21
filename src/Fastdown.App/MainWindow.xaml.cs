@@ -41,7 +41,7 @@ public partial class MainWindow : Window
 
     public MainWindow(string dataDirectory, bool enableBrowser = true)
     {
-        _manager = new DownloadManager(dataDirectory);
+        _manager = new DownloadManager(dataDirectory, schedulerEnabled: enableBrowser);
         _completionEnabled = enableBrowser;
         _completed.UnionWith(_manager.Snapshot().Where(j => j.State == DownloadState.Completed).Select(j => j.Id));
         _notifier = new CompletionNotifier(() => { if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate(); });
@@ -89,6 +89,17 @@ public partial class MainWindow : Window
             VideoHint.Text="MP4 video + ses · Me at the zoo";
         }
         if (screen == "settings") Settings_Click(this, new RoutedEventArgs());
+        if (screen == "updates") { Settings_Click(this, new RoutedEventArgs()); UpdateLayout(); SettingsScroll.ScrollToEnd(); }
+        if (screen is "queue" or "speed")
+        {
+            foreach (var (name, limit) in new[] { ("Tatil videosu.mp4", 1024L * 1024), ("Proje dosyaları.zip", 0L), ("Podcast.m4a", 512L * 1024) })
+            {
+                var job = _manager.Add("https://example.com/" + Uri.EscapeDataString(name), name, Path.Combine(Path.GetTempPath(), "Fastdown-preview"), startNow:false);
+                job.SpeedLimitBytes = limit; job.State = DownloadState.Queued; job.TotalBytes = 150 * 1024 * 1024;
+            }
+            _filter = "queued"; PageTitle.Text = "Sırada bekleyen"; Refresh(); DownloadList.SelectedIndex = 0;
+            if (screen == "speed") JobSpeed_Click(this, new RoutedEventArgs());
+        }
         if (screen == "compact") { Width = MinWidth; Height = MinHeight; }
     }
 
@@ -96,6 +107,7 @@ public partial class MainWindow : Window
     {
         if (!_initialized) return;
         var jobs = _manager.Snapshot();
+        if (_completionEnabled && _manager.Settings.AutoUpdate && !_updateBusy && DateTime.UtcNow >= _nextUpdateCheck) _ = CheckUpdatesAsync(false);
         if (_completionEnabled)
         {
             foreach (var job in jobs.Where(j => j.State == DownloadState.Completed && !_completed.Contains(j.Id)))
@@ -132,7 +144,9 @@ public partial class MainWindow : Window
         PauseAllButton.IsEnabled = active + queued > 0;
         SearchPlaceholder.Visibility = string.IsNullOrEmpty(SearchBox.Text) ? Visibility.Visible : Visibility.Collapsed;
         var search = SearchBox.Text.Trim();
-        var visible = jobs.Where(j => Matches(j) && (j.FileName.Contains(search, StringComparison.OrdinalIgnoreCase) || j.Url.Contains(search, StringComparison.OrdinalIgnoreCase))).OrderByDescending(j => j.CreatedAt).ToArray();
+        var visible = jobs.Where(j => Matches(j) && (j.FileName.Contains(search, StringComparison.OrdinalIgnoreCase) || j.Url.Contains(search, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(j => j.State == DownloadState.Downloading ? 0 : j.State == DownloadState.Queued ? 1 : 2)
+            .ThenBy(j => j.State == DownloadState.Queued ? j.QueueOrder : 0).ThenByDescending(j => j.CreatedAt).ToArray();
         var ids = visible.Select(j => j.Id).ToHashSet();
         for (var index = _rows.Count - 1; index >= 0; index--) if (!ids.Contains(_rows[index].Job.Id)) _rows.RemoveAt(index);
         for (var index = 0; index < visible.Length; index++)
@@ -329,6 +343,7 @@ public partial class MainWindow : Window
         NotifyCheck.IsChecked = _manager.Settings.NotifyOnComplete;
         CompletionActionInput.SelectedValue = _manager.Settings.CompletionAction;
         ShutdownCheck.IsChecked = _shutdown.Armed;
+        AutoUpdateCheck.IsChecked = _manager.Settings.AutoUpdate;
         SettingsError.Text = "";
     }
     private void Slider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -337,17 +352,18 @@ public partial class MainWindow : Window
         if (ConnectionsValue != null && ConnectionsSlider != null) ConnectionsValue.Text = ((int)ConnectionsSlider.Value).ToString();
     }
     private void CancelSettings_Click(object sender, RoutedEventArgs e) => SettingsOverlay.Visibility = Visibility.Collapsed;
-    private void SaveSettings_Click(object sender, RoutedEventArgs e)
+    private async void SaveSettings_Click(object sender, RoutedEventArgs e)
     {
         try
         {
             if (!Path.IsPathFullyQualified(SettingsFolder.Text.Trim())) throw new ArgumentException("Tam bir klasör yolu seç.");
-            if (!long.TryParse(SpeedInput.Text.Trim(), out var kb) || kb < 0 || kb > 10_000_000 || kb is > 0 and < 64) throw new ArgumentException("Hız sınırını 0 veya 64–10000000 KB/sn aralığında gir.");
+            if (!long.TryParse(SpeedInput.Text.Trim(), out var kb) || kb < 0 || kb > 10_000_000) throw new ArgumentException("Hız sınırını 0 veya 16–10000000 KB/sn aralığında gir.");
+            DownloadManager.ValidateSpeedLimit(kb * 1024);
             Directory.CreateDirectory(SettingsFolder.Text.Trim());
+            SettingsOverlay.IsEnabled = false;
             _manager.Settings.DownloadDirectory = Path.GetFullPath(SettingsFolder.Text.Trim());
-            _manager.Settings.MaxConcurrent = (int)ConcurrentSlider.Value;
-            _manager.Settings.ConnectionsPerFile = (int)ConnectionsSlider.Value;
-            _manager.Settings.SpeedLimitBytes = kb * 1024;
+            await _manager.SetTransferSettingsAsync(kb * 1024, (int)ConcurrentSlider.Value, (int)ConnectionsSlider.Value);
+            _manager.Settings.AutoUpdate = AutoUpdateCheck.IsChecked == true;
             _manager.Settings.NotifyOnComplete = NotifyCheck.IsChecked == true;
             _manager.Settings.CompletionAction = CompletionActionInput.SelectedValue is CompletionAction action ? action : CompletionAction.None;
             if (ShutdownCheck.IsChecked == true && !_shutdown.Armed) { _shutdown.Arm(); _shutdown.Tick(_manager.Snapshot(), DateTimeOffset.Now); }
@@ -358,6 +374,7 @@ public partial class MainWindow : Window
             Refresh();
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException) { SettingsError.Text = ex.Message; }
+        finally { SettingsOverlay.IsEnabled = true; }
     }
     private void Notify(string text) { StatusText.Text = text; _statusUntil = DateTime.UtcNow.AddSeconds(7); }
     private void CancelShutdown_Click(object sender, RoutedEventArgs e) { _shutdown.Cancel(); ShutdownCheck.IsChecked = false; ShutdownBanner.Visibility = Visibility.Collapsed; Notify("Bilgisayarı kapatma iptal edildi."); }
@@ -368,7 +385,7 @@ public partial class MainWindow : Window
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) { _videoScan?.Cancel(); AddOverlay.Visibility = SettingsOverlay.Visibility = Visibility.Collapsed; }
+        if (e.Key == Key.Escape) { _videoScan?.Cancel(); AddOverlay.Visibility = SettingsOverlay.Visibility = JobSpeedOverlay.Visibility = Visibility.Collapsed; }
         if (e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control) { Add_Click(sender, e); e.Handled = true; }
         if (e.Key == Key.Enter && AddOverlay.Visibility == Visibility.Visible) { StartDownload_Click(sender, e); e.Handled = true; }
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) { SearchBox.Focus(); e.Handled = true; }
@@ -379,6 +396,8 @@ public partial class MainWindow : Window
         e.Cancel = true;
         if (_closing) return;
         _closing = true;
+        _lifetime.Cancel();
+        _updateHttp.Dispose();
         _shutdown.Cancel();
         _notifier.Dispose();
         _videoScan?.Cancel();
@@ -410,7 +429,7 @@ public sealed class DownloadRow(DownloadJob job) : INotifyPropertyChanged
     public double Progress => Job.TotalBytes > 0 ? Math.Clamp(Interlocked.Read(ref Job.DownloadedBytes) * 100.0 / Job.TotalBytes.Value, 0, 100) : Job.State == DownloadState.Completed ? 100 : 0;
     public string PercentLabel => Job.TotalBytes.HasValue ? $"{Progress:0}%" : "";
     public string SizeLabel => Job.State == DownloadState.Completed ? Format.Bytes(Job.TotalBytes ?? 0) + "  ·  " + Job.Category : Format.Bytes(Interlocked.Read(ref Job.DownloadedBytes)) + " / " + (Job.TotalBytes.HasValue ? Format.Bytes(Job.TotalBytes.Value) : "Boyut bekleniyor");
-    public string StateLabel => Job.State switch { DownloadState.Queued => "Sırada", DownloadState.Downloading => "İndiriliyor", DownloadState.Paused => "Duraklatıldı", DownloadState.Completed => "Tamamlandı", _ => "Yeniden dene" };
+    public string StateLabel => (Job.State switch { DownloadState.Queued => "Sırada", DownloadState.Downloading => "İndiriliyor", DownloadState.Paused => "Duraklatıldı", DownloadState.Completed => "Tamamlandı", _ => "Yeniden dene" }) + (Job.SpeedLimitBytes > 0 && Job.State != DownloadState.Completed ? " · " + Format.Bytes(Job.SpeedLimitBytes) + "/sn" : "");
     public Brush StateBrush => new SolidColorBrush((Color)ColorConverter.ConvertFromString(Job.State switch { DownloadState.Completed or DownloadState.Downloading => "#99F0BF", DownloadState.Failed => "#EBA39E", DownloadState.Paused => "#D5BE88", _ => "#9DAABA" }));
     public Brush IconBackground => new SolidColorBrush((Color)ColorConverter.ConvertFromString(Job.Category switch { "Video" => "#2D2841", "Müzik" => "#3C2937", "Arşiv" => "#3C3424", "Belge" => "#243440", _ => "#25392F" }));
     public Brush IconForeground => new SolidColorBrush((Color)ColorConverter.ConvertFromString(Job.Category switch { "Video" => "#C0ACF7", "Müzik" => "#E9A6CA", "Arşiv" => "#E5C580", "Belge" => "#9CCBEB", _ => "#A5DEB9" }));

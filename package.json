@@ -1,6 +1,6 @@
 {
   "name": "fastdown-development",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "scripts": {
     "test": "node --test tests/browser/extension.test.mjs tests/browser/discovery.test.mjs",

@@ -8,6 +8,7 @@ namespace Fastdown.App;
 
 public partial class App : Application
 {
+    internal System.Diagnostics.ProcessStartInfo? PendingInstaller { get; set; }
     private Mutex? _instance;
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -47,5 +48,14 @@ public partial class App : Application
             Shutdown(1);
         }
     }
-    protected override void OnExit(ExitEventArgs e) { _instance?.Dispose(); base.OnExit(e); }
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _instance?.Dispose();
+        if (PendingInstaller != null)
+        {
+            try { System.Diagnostics.Process.Start(PendingInstaller); }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { MessageBox.Show("Kurulum başlatılamadı: " + ex.Message, "Fastdown"); }
+        }
+        base.OnExit(e);
+    }
 }

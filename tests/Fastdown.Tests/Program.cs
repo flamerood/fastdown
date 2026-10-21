@@ -176,6 +176,53 @@ await Test("Aggregate speed limiter applies to parallel segments", async () =>
     await CheckFile(job, server.Payload);
 });
 
+await Test("Queue priority changes next job without interrupting current work and persists", async () =>
+{
+    var folder=Area("priority");var data=Path.Combine(folder,"data"); Guid promoted;
+    await using(var manager=new DownloadManager(data))
+    {
+        manager.Settings.MaxConcurrent=1;
+        var active=manager.Add(server.Url+"slow","active.bin",folder);
+        await manager.SetJobSpeedLimitAsync(active,1024*1024);
+        await WaitUntil(()=>active.DownloadedBytes>100000);
+        var next=manager.Add(server.Url+"slow","second.bin",folder);
+        var last=manager.Add(server.Url+"slow","promoted.bin",folder);promoted=last.Id;
+        Assert(manager.MoveQueued(last,next),"Queued job could not be moved");
+        Assert(!manager.MoveQueued(active,next)&&active.State==DownloadState.Downloading,"Priority interrupted active work");
+        await WaitUntil(()=>last.State==DownloadState.Downloading,15000);
+        Assert(next.State==DownloadState.Queued&&active.State==DownloadState.Completed,"Scheduler ignored selected priority");
+        await manager.SetJobSpeedLimitAsync(last,512*1024);
+    }
+    await using var restored=new DownloadManager(data);
+    var saved=restored.Snapshot().Single(j=>j.Id==promoted);
+    Assert(saved.SpeedLimitBytes==512*1024,"Per-file limit lost after restart");
+    Assert(saved.QueueOrder<restored.Snapshot().Single(j=>j.FileName=="second.bin").QueueOrder,"Priority lost after restart");
+});
+await Test("A per-file cap is shared by all segments and other files remain independent", async () =>
+{
+    var folder=Area("file-limit");using var engine=new DownloadEngine(Path.Combine(folder,"parts"));
+    var slow=Job("range",folder);slow.FileName="limited.bin";slow.SpeedLimitBytes=1024*1024;
+    var fast=Job("range",folder);fast.FileName="unlimited.bin";
+    var watch=Stopwatch.StartNew();var limited=engine.DownloadAsync(slow,8,CancellationToken.None);
+    await engine.DownloadAsync(fast,8,CancellationToken.None);
+    Assert(!limited.IsCompleted,"Per-file cap multiplied by segment count or affected both files");
+    await limited;Assert(watch.Elapsed.TotalSeconds>=5.5,"Per-file rate exceeded 1 MB/s");
+    await CheckFile(slow,server.Payload);await CheckFile(fast,server.Payload);
+});
+await Test("An active HTTP download responds to a changed limit without restarting", async () =>
+{
+    var folder=Area("live-limit");using var engine=new DownloadEngine(Path.Combine(folder,"parts"));
+    var job=Job("range",folder);job.SpeedLimitBytes=256*1024;
+    var download=engine.DownloadAsync(job,8,CancellationToken.None);
+    await WaitUntil(()=>job.DownloadedBytes>200000);
+    var watch=Stopwatch.StartNew();job.SpeedLimitBytes=0;await download;
+    Assert(watch.Elapsed.TotalSeconds<3,"Old reservations kept the download throttled");
+    await CheckFile(job,server.Payload);
+});
+await Test("Updates reject downgrades, preview versions, foreign URLs and missing hashes", UpdateTests.Metadata);
+await Test("Update download validates SHA256, reuses a verified cache and rejects later tampering", ()=>UpdateTests.Integrity(Area("updates")));
+await Test("Corrupt and cancelled updates never leave an installable file", ()=>UpdateTests.Corruption(Area("bad-updates")));
+
 await Test("404 is reported, retriable and removable", async () =>
 {
     var folder = Area("error");

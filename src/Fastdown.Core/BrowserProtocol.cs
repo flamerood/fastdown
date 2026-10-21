@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace Fastdown.Core;
 
 public sealed record BrowserRequest(string Action = "ping", string? Id = null, string? Url = null, string? FileName = null, string? Referrer = null, bool Focus = false, int VideoHeight = 0, string VideoFormat = "mkv");
-public sealed record BrowserReply(bool Ok, string? Error = null, string? FileName = null, Guid? JobId = null, bool AppRunning = false, string Version = "1.6", VideoInfo? Video = null);
+public sealed record BrowserReply(bool Ok, string? Error = null, string? FileName = null, Guid? JobId = null, bool AppRunning = false, string Version = "1.7", VideoInfo? Video = null);
 
 public static class BrowserProtocol
 {

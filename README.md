@@ -2,6 +2,17 @@
 
 IDM'den esinlenen, Türkçe arayüzlü Windows indirme yöneticisi. WPF ve .NET 10 ile geliştirilmiştir. Harici NuGet paketine ihtiyaç duymaz.
 
+**[Windows için Fastdown-Setup.exe indir](https://github.com/flamerood/fastdown/releases/latest/download/Fastdown-Setup.exe)** · [Tüm sürümler ve taşınabilir ZIP](https://github.com/flamerood/fastdown/releases)
+
+## 1.7: Güncelleme, öncelik ve hız
+
+- **Tek EXE kurulum:** Kullanıcı hesabına kurulur; yönetici yetkisi istemez. Çalışma zamanı, video araçları, kısayollar ve tarayıcı köprüsü dahildir. Tarayıcı eklentisi için kurulum rehberi açılabilir.
+- **Otomatik güncelleme:** Başlangıçta ve uygulama açıkken 12 saatte bir kararlı GitHub sürümü kontrol edilir. Yeni kurulum dosyası indirilip GitHub'ın SHA-256 kaydıyla doğrulanır. **Kur ve yeniden başlat** düğmesi indirmeleri duraklatır, listeyi kaydeder ve kurulumu başlatır. Ayarlar ve indirme geçmişi korunur. Ayarlar'dan otomatik kontrolü kapatabilir veya elle kontrol edebilirsin.
+- **Kuyruk önceliği:** Sırada bekleyen dosyaları sürükleyerek sırala veya sağ tık menüsünden öne/yukarı/aşağı taşı. Açık indirme kesilmez; sıra yeniden açılışta korunur.
+- **Hız sınırı:** Ayarlar'dan toplam, dosyaya sağ tıklayarak dosya başına sınır koy. 0 = sınırsız; en küçük sınır 16 KB/sn. Dosyanın tüm bağlantıları aynı bütçeyi paylaşır. HTTP indirmeleri yeni sınıra canlı geçer; video işleri yeni sınırla otomatik duraklatılıp sürdürülür. Her iki sınır varsa daha dar bütçe uygulanır.
+
+1.6'dan geçerken kurulum dosyasını bir kez indir. 1.7 ve sonraki sürümlerde uygulama içi güncelleme kullanılabilir. Güncellemeden sonra tarayıcı uzantısını ve açık sayfaları yenile. Kurulum bir sistem yeniden başlatması istemez.
+
 ## Çalıştırma
 
 `Fastdown` klasöründeki **Fastdown.exe** dosyasını aç. Klasördeki diğer dosyaları aynı yerde tut.
@@ -39,7 +50,7 @@ Eklenti panelinde **YouTube videosunu indir / Bu sayfadaki videoyu çözümle �
 
 Gerekli yt-dlp, FFmpeg ve Deno araçları `Fastdown/tools` klasöründedir. Site değişikliklerinden sonra **Video-Araclarini-Guncelle.cmd** ile resmi sürümleri SHA-256 doğrulamasıyla güncelleyebilirsin. Güncelleme yalnızca uygulamanın kendi klasörüne yapılır; PATH veya sistem ayarları değiştirilmez. Güncellemeden önce video indirmelerini duraklat.
 
-Herkese açık, erişilebilir videolar desteklenir. DRM, devam eden canlı yayınlar, tarayıcı çerezlerini aktarma ve giriş/doğrulama isteyen videolar desteklenmez. Sayfa çözümleyici bazı HLS/DASH yayınlarını da indirebilir; ağdan algılanan her ham yayın parçasının doğrudan aktarılabileceği anlamına gelmez. Video indirmelerinde hız sınırı iş başlarken uygulanır ve eşzamanlı indirme sayısına bölünür; değiştirdiğinde video işini duraklatıp sürdür. Araçların sürümleri ve üçüncü taraf lisansları için [VIDEO-TOOLS.md](VIDEO-TOOLS.md).
+Herkese açık, erişilebilir videolar desteklenir. DRM, devam eden canlı yayınlar, tarayıcı çerezlerini aktarma ve giriş/doğrulama isteyen videolar desteklenmez. Sayfa çözümleyici bazı HLS/DASH yayınlarını da indirebilir; ağdan algılanan her ham yayın parçasının doğrudan aktarılabileceği anlamına gelmez. Video indirmelerinde toplam sınır eşzamanlı indirme sayısına bölünür; dosya sınırı varsa daha düşük olan değer uygulanır. Araçların sürümleri ve üçüncü taraf lisansları için [VIDEO-TOOLS.md](VIDEO-TOOLS.md).
 
 Varsayılan indirme klasörü: `%USERPROFILE%\Downloads\Fastdown`.
 Liste, ayarlar ve geçici parçalar: `%LOCALAPPDATA%\Fastdown`. Önceki Akış kurulumunun listesi varsa aynı yerel kayıt kullanılmaya devam edilir.
@@ -73,7 +84,7 @@ node tests/browser/filter-e2e.mjs
 ./scripts/Build-Release.ps1
 ```
 
-Paket ve SHA-256 dosyası `artifacts` altında oluşur. Video araçları eksikse resmi yayınlardan doğrulanarak indirilir. GitHub Actions testleri push/PR sırasında, **Portable Windows package** iş akışı ise elle çalıştırıldığında paketi üretir. Kişisel ayarlar, indirme listeleri ve derlenmiş dosyalar Git'e dahil edilmez.
+ZIP, `Fastdown-Setup.exe` ve SHA-256 dosyaları `artifacts` altında oluşur. Resmi, imzası ve hash değeri doğrulanan Inno Setup derleyicisi ilk çalışmada `artifacts/build-tools` içine hazırlanır; yalnızca ZIP için `-SkipSetup` kullan. Video araçları eksikse resmi yayınlardan doğrulanarak indirilir. GitHub Actions testleri push/PR sırasında, **Portable Windows package** iş akışı ise elle çalıştırıldığında iki paketi üretir. Kişisel ayarlar, indirme listeleri ve derlenmiş dosyalar Git'e dahil edilmez.
 
 Testler yerel HTTP sunucusu kullanır, internetten dosya indirmez. Çok parçalı indirme ve SHA-256 doğrulaması, Range desteklemeyen sunucu, bilinmeyen boyut, boş dosya, kapanıp açıldıktan sonra sürdürme, değişen ETag, kuyruk, toplam hız sınırı, HTTP hataları ve mevcut dosyaların korunması sınanır. `--video-suite` gerçek yt-dlp/FFmpeg ile iki çözünürlüklü yerel DASH kaynağından seçilen videoyu ve sesi indirir; ffprobe ile gerçek çözünürlüğü ve ses akışını doğrular. `node tests/browser/video-smoke.mjs` aynı işlemi sıradan HTML video sayfasında sınar. `node tests/browser/e2e.mjs` izole Chromium profilinde eklentiyi ve yerel köprüyü sınar; önce Fastdown'ı kapat.
 

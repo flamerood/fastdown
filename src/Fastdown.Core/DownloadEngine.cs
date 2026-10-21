@@ -8,15 +8,12 @@ public sealed class DownloadEngine : IDisposable
 {
     private readonly HttpClient _http;
     private readonly string _partsRoot;
-    private readonly Func<long> _speedLimit;
-    private readonly object _throttleGate = new();
-    private double _nextReadTime;
-    private long _lastLimit;
+    private readonly BandwidthLimiter _bandwidth;
 
     public DownloadEngine(string partsRoot, Func<long>? speedLimit = null)
     {
         _partsRoot = Path.GetFullPath(partsRoot);
-        _speedLimit = speedLimit ?? (() => 0);
+        _bandwidth = new BandwidthLimiter(speedLimit ?? (() => 0));
         _http = new HttpClient(new SocketsHttpHandler
         {
             AutomaticDecompression = DecompressionMethods.None,
@@ -102,9 +99,10 @@ public sealed class DownloadEngine : IDisposable
             Interlocked.Add(ref job.DownloadedBytes, length);
         }
         using var group = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var jobBandwidth = new BandwidthLimiter(() => job.SpeedLimitBytes);
         var parts = Enumerable.Range(0, job.SegmentCount).Select(async index =>
         {
-            try { await DownloadPartAsync(job, index, group.Token); }
+            try { await DownloadPartAsync(job, index, jobBandwidth, group.Token); }
             catch { await group.CancelAsync(); throw; }
         }).ToArray();
         try { await Task.WhenAll(parts); }
@@ -139,7 +137,7 @@ public sealed class DownloadEngine : IDisposable
         try { DeleteParts(job); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
-    private async Task DownloadPartAsync(DownloadJob job, int index, CancellationToken token)
+    private async Task DownloadPartAsync(DownloadJob job, int index, BandwidthLimiter jobBandwidth, CancellationToken token)
     {
         var path = PartPath(job, index);
         var ranged = job.SupportsRanges && job.TotalBytes > 0;
@@ -186,7 +184,7 @@ public sealed class DownloadEngine : IDisposable
                 }
                 await using var input = await response.Content.ReadAsStreamAsync(token);
                 await using var output = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 65536, true);
-                var buffer = new byte[65536];
+                var buffer = new byte[16384];
                 var written = existing;
                 while (true)
                 {
@@ -195,7 +193,8 @@ public sealed class DownloadEngine : IDisposable
                     timeout.CancelAfter(Timeout.InfiniteTimeSpan);
                     if (read == 0) break;
                     if (expected.HasValue && written + read > expected) throw new InvalidDataException("Sunucu beklenenden fazla veri gönderdi.");
-                    await ThrottleAsync(read, token);
+                    await _bandwidth.WaitAsync(read, token);
+                    await jobBandwidth.WaitAsync(read, token);
                     await output.WriteAsync(buffer.AsMemory(0, read), token);
                     written += read;
                     Interlocked.Add(ref job.DownloadedBytes, read);
@@ -217,22 +216,6 @@ public sealed class DownloadEngine : IDisposable
         IOException => true,
         _ => false
     };
-
-    private async Task ThrottleAsync(int bytes, CancellationToken token)
-    {
-        var limit = _speedLimit();
-        if (limit <= 0) return;
-        double delay;
-        lock (_throttleGate)
-        {
-            var now = Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
-            if (_lastLimit != limit) { _nextReadTime = now; _lastLimit = limit; }
-            _nextReadTime = Math.Max(now, _nextReadTime);
-            delay = _nextReadTime - now;
-            _nextReadTime += bytes / (double)limit;
-        }
-        if (delay > 0) await Task.Delay(TimeSpan.FromSeconds(delay), token);
-    }
 
     public void Dispose() => _http.Dispose();
 }
