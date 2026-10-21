@@ -1,6 +1,20 @@
 param([string]$ApplicationDirectory)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+function Invoke-RetryDownload {
+    param([string]$Uri, [string]$OutFile, [hashtable]$Headers)
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri $Uri -Headers $Headers -OutFile $OutFile -TimeoutSec 120
+            return
+        } catch {
+            $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+            if ($attempt -eq 4 -or $status -in @(400,401,403,404)) { throw }
+            Write-Host "Gecici indirme hatasi; yeniden deneniyor ($attempt/4)."
+            Start-Sleep -Seconds ([Math]::Pow(2,$attempt))
+        }
+    }
+}
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $destination = if ($ApplicationDirectory) { Join-Path ([IO.Path]::GetFullPath($ApplicationDirectory)) 'tools' } else { Join-Path $projectRoot 'Fastdown\tools' }
 $cache = Join-Path $projectRoot '.test-data\video-tools'
@@ -22,7 +36,7 @@ foreach ($spec in @(
     $download = Join-Path $cache $asset.name
     if (!(Test-Path -LiteralPath $download) -or (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash -ne $expected) {
         Write-Host "$($spec.Repo) $($release.tag_name) indiriliyor..."
-        Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -Headers $headers -OutFile $download
+        Invoke-RetryDownload -Uri $asset.browser_download_url -Headers $headers -OutFile $download
     }
     if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash -ne $expected) { throw 'Indirilen aracin SHA-256 dogrulamasi basarisiz.' }
     if ($asset.name -like '*.exe') { Copy-Item -LiteralPath $download -Destination $destination -Force }
@@ -48,6 +62,6 @@ foreach ($spec in @(
     @{Url='https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/THIRD_PARTY_LICENSES.txt';Name='yt-dlp-THIRD_PARTY_LICENSES.txt'},
     @{Url='https://raw.githubusercontent.com/denoland/deno/main/LICENSE.md';Name='deno-LICENSE.md'},
     @{Url='https://www.gnu.org/licenses/gpl-3.0.txt';Name='GPL-3.0.txt'}
-)) { Invoke-WebRequest -UseBasicParsing -Uri $spec.Url -Headers $headers -OutFile (Join-Path $destination $spec.Name) }
+)) { Invoke-RetryDownload -Uri $spec.Url -Headers $headers -OutFile (Join-Path $destination $spec.Name) }
 $records | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $destination 'versions.json') -Encoding UTF8
 Write-Host 'Video araclari dogrulandi ve Fastdown\tools klasorune kuruldu.'
