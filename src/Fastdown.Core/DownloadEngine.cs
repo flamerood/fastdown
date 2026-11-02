@@ -59,7 +59,7 @@ public sealed class DownloadEngine : IDisposable
             return new RemoteInfo(0, false, response.Headers.ETag?.ToString(), response.Content.Headers.LastModified, null);
         response.EnsureSuccessStatusCode();
         var range = response.Content.Headers.ContentRange;
-        var ranged = response.StatusCode == HttpStatusCode.PartialContent && range?.From == 0 && range.To == 0 && range.Length > 0;
+        var ranged = range?.Length is > 0 && MatchesRange(response, 0, 0, range.Length.Value);
         var length = ranged ? range!.Length : response.Content.Headers.ContentLength;
         if (response.StatusCode == HttpStatusCode.PartialContent && !ranged)
             throw new IOException("Sunucu geçersiz bir dosya aralığı döndürdü.");
@@ -67,6 +67,19 @@ public sealed class DownloadEngine : IDisposable
         var disposition = response.Content.Headers.ContentDisposition;
         var name = disposition?.FileNameStar ?? disposition?.FileName?.Trim('"');
         return new RemoteInfo(length, ranged, etag, response.Content.Headers.LastModified, name, response.Content.Headers.ContentType?.MediaType);
+    }
+
+    private static bool MatchesRange(HttpResponseMessage response, long start, long end, long total)
+    {
+        var range = response.Content.Headers.ContentRange;
+        var length = response.Content.Headers.ContentLength;
+        if (response.StatusCode != HttpStatusCode.PartialContent || range == null || !string.Equals(range.Unit, "bytes", StringComparison.OrdinalIgnoreCase) || range.From != start || range.Length != total || start < 0 || end < start || end >= total) return false;
+        var expected = end - start + 1;
+        if (length.HasValue && length.Value != expected) return false;
+        // Some file hosts send the requested bytes but report EOF instead of the requested end.
+        // Accept only that specific discrepancy, with an exact Content-Length and matching start/total.
+        // The body length and file validator are still checked for every part before publishing a file.
+        return range.To == end || (range.To == total - 1 && length == expected);
     }
 
     private string PartsDirectory(DownloadJob job) => Path.Combine(_partsRoot, job.Id.ToString("N"));
@@ -176,8 +189,7 @@ public sealed class DownloadEngine : IDisposable
                 response.EnsureSuccessStatusCode();
                 if (ranged)
                 {
-                    var range = response.Content.Headers.ContentRange;
-                    if (response.StatusCode != HttpStatusCode.PartialContent || range?.From != start + existing || range.To != end || range.Length != job.TotalBytes)
+                    if (!MatchesRange(response, start + existing, end!.Value, job.TotalBytes!.Value))
                         throw new InvalidDataException("Sunucu dosyayı veya devam desteğini değiştirdi. Yeniden dene.");
                     if (job.ETag != null && response.Headers.ETag is { } actualTag && actualTag.ToString() != job.ETag)
                         throw new InvalidDataException("İndirme sırasında dosya değişti. Yeniden dene.");

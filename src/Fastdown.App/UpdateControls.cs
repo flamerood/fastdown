@@ -15,7 +15,7 @@ public partial class MainWindow
     private DateTime _nextUpdateCheck = DateTime.UtcNow.AddSeconds(4);
     private AppUpdate? _availableUpdate;
     private string? _updatePath;
-    private static Version CurrentVersion => typeof(MainWindow).Assembly.GetName().Version is { } v ? new Version(v.Major, v.Minor, Math.Max(0, v.Build)) : new Version(1, 7, 0);
+    private static Version CurrentVersion => typeof(MainWindow).Assembly.GetName().Version is { } v ? new Version(v.Major, v.Minor, Math.Max(0, v.Build)) : new Version(1, 7, 1);
 
     private async void CheckUpdate_Click(object sender, RoutedEventArgs e) => await CheckUpdatesAsync(true);
     private async Task CheckUpdatesAsync(bool manual)

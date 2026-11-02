@@ -4,6 +4,10 @@ IDM'den esinlenen, Türkçe arayüzlü Windows indirme yöneticisi. WPF ve .NET 
 
 **[Windows için Fastdown-Setup.exe indir](https://github.com/flamerood/fastdown/releases/latest/download/Fastdown-Setup.exe)** · [Tüm sürümler ve taşınabilir ZIP](https://github.com/flamerood/fastdown/releases)
 
+## 1.7.1: Dosya sunucusu uyumluluğu
+
+Bazı dosya sunucuları istenen byte aralığını doğru gönderirken `Content-Range` sonunu hatalı biçimde dosyanın sonu olarak bildirir. Fastdown artık başlangıç, toplam boyut ve `Content-Length` istenen aralıkla birebir uyuştuğunda bu yanıtı kabul eder. Çok bağlantılı indirme ve kaldığı yerden sürdürme korunur; farklı başlangıçlar, boyut uyuşmazlıkları ve değişen dosya doğrulayıcıları reddedilmeye devam eder. Eklenti panelindeki eski Akış başlığı da Fastdown olarak güncellendi.
+
 ## 1.7: Güncelleme, öncelik ve hız
 
 - **Tek EXE kurulum:** Kullanıcı hesabına kurulur; yönetici yetkisi istemez. Çalışma zamanı, video araçları, kısayollar ve tarayıcı köprüsü dahildir. Tarayıcı eklentisi için kurulum rehberi açılabilir.

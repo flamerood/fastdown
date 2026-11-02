@@ -2,7 +2,7 @@
   #error PackageRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.7.0"
+  #define AppVersion "1.7.1"
 #endif
 [Setup]
 AppId={{58F597F7-44F6-4E85-BD36-22C52B33C87D}

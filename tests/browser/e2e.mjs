@@ -28,6 +28,11 @@ const requested = new Map();
 const server = createServer((req, res) => {
   requested.set(req.url,(requested.get(req.url)||0)+1);
   const opaque={"/opaque-a.webm":video480,"/opaque-b.webm":video720,"/opaque-c.webm":video1080,"/anonymous-one.webm":video720,"/anonymous-two.webm":video1080};
+  if(req.url==="/file-host"){
+    res.writeHead(200,{"Content-Type":"text/html; charset=utf-8"});
+    res.end('<!doctype html><meta charset="utf-8"><title>Dosya sunucusu testi</title><button id="host-download">DOWNLOAD</button><script>document.querySelector("button").onclick=async()=>{const r=await fetch("/file-host/go",{method:"POST"});location.href=await r.text();};</script>');return;
+  }
+  if(req.url==="/file-host/go"){res.writeHead(200,{"Content-Type":"text/plain"});res.end(ready.url+"eof-header");return;}
   if(req.url==="/extractor-page"){
     res.writeHead(200,{"Content-Type":"text/html; charset=utf-8"});res.end('<!doctype html><html><title>Sesli video kalite testi</title><body style="background:#15231a;color:#d9f3e2;font:18px system-ui;padding:30px"><h1>Video ve ses birleştirme</h1><video controls width="640"><source src="/extractor.mpd" type="application/dash+xml"></video></body></html>');return;
   }
@@ -113,6 +118,14 @@ try {
   const browserCopy = await worker.evaluate(() => chrome.downloads.search({ filenameRegex: "automatic\\.bin$" }));
   assert.equal(browserCopy.length, 0);
   check("A normal browser download is paused, accepted by Fastdown and removed from browser queue");
+  const hostPage=await context.newPage();await hostPage.goto(`http://127.0.0.1:${server.address().port}/file-host`);
+  await hostPage.locator("#host-download").click();
+  await until(async()=>(await jobs()).some(j=>j.FileName==="archive-part01.rar"&&j.State==="Completed"));
+  const archive=(await jobs()).find(j=>j.FileName==="archive-part01.rar"&&j.State==="Completed");
+  const reference=(await jobs()).find(j=>j.FileName.startsWith("automatic")&&j.State==="Completed");
+  assert.equal(archive.SegmentCount,4);assert.equal(archive.SupportsRanges,true);
+  assert.deepEqual(await readFile(join(ready.downloads,archive.FileName)),await readFile(join(ready.downloads,reference.FileName)));
+  check("A POST-generated archive download with an EOF Content-Range header transfers byte-for-byte through the real bridge");
   const popup = await context.newPage();
   popup.on("pageerror", error => console.error("POPUP ERROR: " + error.message));
   await popup.goto(`chrome-extension://${id}/popup.html`);

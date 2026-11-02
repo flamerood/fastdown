@@ -85,6 +85,56 @@ await Test("Server ignores ranges: single-stream fallback", async () =>
     await CheckFile(job, server.Payload);
 });
 
+await Test("EOF Content-Range quirk preserves multipart integrity and browser handoff", async () =>
+{
+    var folder=Area("eof-header");
+    await using var manager=new DownloadManager(Path.Combine(folder,"data"));
+    manager.Settings.DownloadDirectory=folder;
+    var reply=await manager.AcceptBrowserAsync(new BrowserRequest("download",Guid.NewGuid().ToString(),server.Url+"eof-header",FileName:"archive.rar"),CancellationToken.None);
+    Assert(reply.Ok,"Compatible ranged response was rejected during browser preflight");
+    var job=manager.Snapshot().Single();
+    await WaitUntil(()=>job.State is DownloadState.Completed or DownloadState.Failed,20000);
+    Assert(job.State==DownloadState.Completed && job.SupportsRanges && job.SegmentCount==4,"EOF header host did not complete a multipart download: "+job.Error);
+    await CheckFile(job,server.Payload);
+});
+
+await Test("EOF Content-Range host resumes existing parts without corrupting the file", async () =>
+{
+    var folder=Area("eof-resume");using var engine=new DownloadEngine(Path.Combine(folder,"parts"));
+    var job=Job("eof-slow",folder);job.SpeedLimitBytes=512*1024;
+    using(var cancel=new CancellationTokenSource())
+    {
+        var task=engine.DownloadAsync(job,4,cancel.Token);
+        await WaitUntil(()=>job.DownloadedBytes>200000);cancel.Cancel();
+        try{await task;throw new Exception("Cancelled transfer completed");}catch(OperationCanceledException){}
+    }
+    var retained=job.DownloadedBytes;
+    Assert(retained>0&&!File.Exists(job.TargetPath),"Cancellation lost parts or published an incomplete file");
+    while(server.Ranges.TryDequeue(out _)){}
+    job.SpeedLimitBytes=0;
+    await engine.DownloadAsync(job,4,CancellationToken.None);
+    Assert(server.Ranges.Any(r=>r.Start>0&&r.Start%(server.Payload.Length/4)!=0),"Partial segments were restarted instead of resumed");
+    await CheckFile(job,server.Payload);
+});
+
+await Test("Malformed range starts, lengths and unrelated end mismatches remain rejected", async () =>
+{
+    var folder=Area("bad-range");using var engine=new DownloadEngine(Path.Combine(folder,"parts"));
+    foreach(var route in new[]{"wrong-start","wrong-size","wrong-end"})
+    {
+        try { await engine.ProbeAsync(server.Url+route,CancellationToken.None);throw new Exception("Invalid range accepted: "+route); }
+        catch(IOException ex){Assert(ex.Message.Contains("aralığı"),"Unexpected rejection: "+ex.Message);}
+    }
+});
+
+await Test("A changed total after preflight never publishes a corrupt ranged file", async () =>
+{
+    var folder=Area("changed-total");using var engine=new DownloadEngine(Path.Combine(folder,"parts"));
+    var job=Job("changed-total",folder);
+    try { await engine.DownloadAsync(job,4,CancellationToken.None);throw new Exception("Changed total was accepted"); }catch(InvalidDataException){}
+    Assert(!File.Exists(job.TargetPath),"Invalid ranges published a file");
+});
+
 await Test("Unknown content length and empty file", async () =>
 {
     var folder = Area("unknown");
@@ -569,7 +619,15 @@ sealed class FixtureServer : IAsyncDisposable
             var length = to - from + 1;
             var meta = $"ETag: {etag}\r\nContent-Type: application/octet-stream\r\n";
             if (route == "attachment") meta += "Content-Disposition: attachment; filename=\"automatic.bin\"\r\n";
-            if (ranged) meta += $"Content-Range: bytes {from}-{to}/{payload.Length}\r\n";
+            if (ranged)
+            {
+                var reportedStart=route=="wrong-start"?from+1:from;
+                var reportedEnd=route is "eof-header" or "eof-slow" or "wrong-size" or "wrong-start"?payload.Length-1:route=="wrong-end"?Math.Min(to+1,payload.Length-1):to;
+                var reportedTotal=route=="changed-total"&&length>1?payload.Length+1:payload.Length;
+                meta += $"Content-Range: bytes {reportedStart}-{reportedEnd}/{reportedTotal}\r\n";
+                if(route=="wrong-size")length++;
+            }
+            if(route is "eof-header" or "eof-slow")meta += "Content-Disposition: attachment; filename=\"archive-part01.rar\"\r\n";
             if (route != "unknown") meta += $"Content-Length: {length}\r\n";
             await WriteHeader(stream, ranged ? "206 Partial Content" : "200 OK", meta);
             for (var offset = from; offset <= to;)
@@ -577,7 +635,7 @@ sealed class FixtureServer : IAsyncDisposable
                 var count = (int)Math.Min(16384, to - offset + 1);
                 await stream.WriteAsync(payload.AsMemory((int)offset, count), _cancel.Token);
                 offset += count;
-                if ((route is "slow" or "mutable" or "attachment") && length > 1) await Task.Delay(8, _cancel.Token);
+                if ((route is "slow" or "mutable" or "attachment" or "eof-slow") && length > 1) await Task.Delay(8, _cancel.Token);
             }
         }
         catch (Exception ex) when (ex is IOException or OperationCanceledException or SocketException) { }
