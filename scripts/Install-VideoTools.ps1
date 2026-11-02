@@ -60,8 +60,15 @@ foreach ($spec in @(
 foreach ($spec in @(
     @{Url='https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/LICENSE';Name='yt-dlp-LICENSE'},
     @{Url='https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/THIRD_PARTY_LICENSES.txt';Name='yt-dlp-THIRD_PARTY_LICENSES.txt'},
-    @{Url='https://raw.githubusercontent.com/denoland/deno/main/LICENSE.md';Name='deno-LICENSE.md'},
-    @{Url='https://www.gnu.org/licenses/gpl-3.0.txt';Name='GPL-3.0.txt'}
-)) { Invoke-RetryDownload -Uri $spec.Url -Headers $headers -OutFile (Join-Path $destination $spec.Name) }
+    @{Url='https://raw.githubusercontent.com/denoland/deno/main/LICENSE.md';Name='deno-LICENSE.md'}
+)) {
+    Write-Host "Lisans indiriliyor: $($spec.Name)"
+    Invoke-RetryDownload -Uri $spec.Url -Headers $headers -OutFile (Join-Path $destination $spec.Name)
+}
+# The verified FFmpeg GPL archive already contains the complete GPLv3 text.
+# Reuse it verbatim instead of depending on another license server during every build.
+$gpl = Join-Path $destination 'yt-dlp-FFmpeg-Builds-LICENSE.txt'
+if (!(Test-Path -LiteralPath $gpl) -or ((Get-Content -LiteralPath $gpl -TotalCount 3) -join "`n") -notmatch 'GNU GENERAL PUBLIC LICENSE\s+Version 3') { throw 'Dogrulanan FFmpeg paketinde GPLv3 lisansi bulunamadi.' }
+Copy-Item -LiteralPath $gpl -Destination (Join-Path $destination 'GPL-3.0.txt') -Force
 $records | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $destination 'versions.json') -Encoding UTF8
 Write-Host 'Video araclari dogrulandi ve Fastdown\tools klasorune kuruldu.'
