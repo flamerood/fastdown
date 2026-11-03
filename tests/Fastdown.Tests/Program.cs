@@ -279,6 +279,48 @@ await Test("Failed update checks retry promptly and successful checks reset back
 await Test("Video bandwidth uses active jobs, rebalances after queue changes and respects user pause", ()=>VideoBudgetTests.Run(Area("video-budget"),server.Url+"range"));
 if(args.Contains("--speed-suite"))await Test("Real HTTP 5000/12000 KB limits, per-file/aggregate budgets and live unlimited transitions",async()=>{await using var speed=new SpeedTests();await speed.Run(Area("speed-matrix"));});
 
+await Test("Renewed file link preserves parts, persists URL and resumes exact bytes", async () =>
+{
+    var folder=Area("renew-link");var data=Path.Combine(folder,"data");Guid id;long partial;
+    await using(var manager=new DownloadManager(data))
+    {
+        var job=manager.Add(server.Url+"slow","renew.bin",folder);id=job.Id;
+        await WaitUntil(()=>Interlocked.Read(ref job.DownloadedBytes)>200000);
+        try{await manager.RefreshLinkAsync(job,server.Url+"range",false,CancellationToken.None);throw new Exception("Active replacement accepted");}catch(InvalidOperationException){}
+        await manager.PauseAsync(job);partial=job.DownloadedBytes;
+        var paths=Directory.GetFiles(Path.Combine(data,"parts",id.ToString("N")));var lengths=paths.Select(x=>new FileInfo(x).Length).ToArray();
+        foreach(var route in new[]{"missing","html","mutable","plain"})
+        {
+            try{await manager.RefreshLinkAsync(job,server.Url+route,false,CancellationToken.None);throw new Exception("Bad replacement accepted: "+route);}
+            catch(Exception ex) when(ex is HttpRequestException or InvalidDataException){}
+            Assert(job.Url==server.Url+"slow"&&job.DownloadedBytes==partial,"Failed renewal changed the job");
+            Assert(paths.Select(x=>new FileInfo(x).Length).SequenceEqual(lengths),"Failed renewal changed retained parts");
+        }
+        Assert(await manager.RefreshLinkAsync(job,server.Url+"range",false,CancellationToken.None),"Matching replacement lost parts");
+        Assert(job.DownloadedBytes==partial&&job.State==DownloadState.Paused,"Renewal changed progress");
+    }
+    var start=server.Ranges.Count;
+    await using(var manager=new DownloadManager(data))
+    {
+        var job=manager.Snapshot().Single(x=>x.Id==id);Assert(job.Url==server.Url+"range","Renewed URL not persisted");
+        manager.Resume(job);await WaitUntil(()=>job.State is DownloadState.Completed or DownloadState.Failed);
+        Assert(job.State==DownloadState.Completed,job.Error??"Renewed download failed");await CheckFile(job,server.Payload);
+        Assert(server.Ranges.Skip(start).Any(r=>r.End!=0&&r.Start%(server.Payload.Length/4)!=0),"Renewal restarted every segment");
+    }
+});
+await Test("Unverified renewed file requires explicit restart and never mixes content", async () =>
+{
+    var folder=Area("renew-restart");await using var manager=new DownloadManager(Path.Combine(folder,"data"));
+    var job=manager.Add(server.Url+"slow","restart.bin",folder);await WaitUntil(()=>Interlocked.Read(ref job.DownloadedBytes)>200000);await manager.PauseAsync(job);
+    var old=job.Url;var foreign=server.Url.Replace("127.0.0.1","localhost")+"range";
+    try{await manager.RefreshLinkAsync(job,foreign,false,CancellationToken.None);throw new Exception("Cross-origin resume accepted");}catch(InvalidDataException){}
+    using(var cancel=new CancellationTokenSource()){cancel.Cancel();try{await manager.RefreshLinkAsync(job,server.Url+"range",false,cancel.Token);throw new Exception("Cancellation ignored");}catch(OperationCanceledException){}}
+    Assert(job.Url==old,"Rejected renewal replaced URL");
+    Assert(!await manager.RefreshLinkAsync(job,server.Url+"mutable",true,CancellationToken.None),"Explicit restart retained parts");
+    Assert(job.DownloadedBytes==0&&job.FileName=="restart.bin","Restart lost name or kept progress");
+    manager.Resume(job);await WaitUntil(()=>job.State is DownloadState.Completed or DownloadState.Failed);
+    Assert(job.State==DownloadState.Completed,job.Error??"Replacement failed");await CheckFile(job,server.Version==2?server.PayloadV2:server.Payload);
+});
 await Test("404 is reported, retriable and removable", async () =>
 {
     var folder = Area("error");

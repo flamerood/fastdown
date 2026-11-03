@@ -252,6 +252,53 @@ public sealed class DownloadManager : IAsyncDisposable
 
     public void SaveSettings() { lock (_gate) SaveLocked(); }
 
+    public async Task<bool> RefreshLinkAsync(DownloadJob job, string url, bool restart, CancellationToken token)
+    {
+        var uri = DownloadEngine.ValidateUrl(url);
+        string oldUrl;
+        string? referrer;
+        void CheckEditable()
+        {
+            if (_closing || !_jobs.Contains(job)) throw new InvalidOperationException("İndirme artık listede değil.");
+            if (job.IsVideoPage) throw new InvalidOperationException("Bu seçenek doğrudan dosya indirmeleri içindir. Video sayfasını yeni indirme olarak ekle.");
+            if (job.State is not (DownloadState.Paused or DownloadState.Failed) || _running.ContainsKey(job.Id))
+                throw new InvalidOperationException("Bağlantıyı yenilemeden önce indirmeyi duraklat.");
+        }
+        lock (_gate)
+        {
+            CheckEditable(); oldUrl = job.Url;
+            referrer = new Uri(oldUrl).GetLeftPart(UriPartial.Authority) == uri.GetLeftPart(UriPartial.Authority) ? job.Referrer : null;
+        }
+        var remote = await _engine.ProbeAsync(uri.AbsoluteUri, token, referrer);
+        if (remote.ContentType is "text/html" or "application/xhtml+xml" || remote.ContentType?.Contains("mpegurl", StringComparison.OrdinalIgnoreCase) == true || remote.ContentType?.Contains("dash+xml", StringComparison.OrdinalIgnoreCase) == true)
+            throw new InvalidDataException("Yeni adres bir dosya bağlantısı olmalı; web sayfası veya yayın listesi kabul edilmez.");
+        lock (_gate)
+        {
+            token.ThrowIfCancellationRequested(); CheckEditable();
+            if (job.Url != oldUrl) throw new InvalidOperationException("Bağlantı bu sırada değişti. Pencereyi yeniden aç.");
+            var hasParts = Interlocked.Read(ref job.DownloadedBytes) > 0;
+            var sameFile = remote.Ranges && job.SupportsRanges && remote.Length == job.TotalBytes &&
+                job.ETag != null && remote.ETag == job.ETag &&
+                new Uri(oldUrl).GetLeftPart(UriPartial.Authority) == uri.GetLeftPart(UriPartial.Authority);
+            if (hasParts && !sameFile && !restart)
+                throw new InvalidDataException("Aynı dosya olduğu doğrulanamadı. Eski bağlantı ve parçalar korundu. Baştan indirmek için kutuyu işaretle.");
+            var retained = hasParts && sameFile && !restart;
+            if (!retained)
+            {
+                _engine.DeleteParts(job);
+                Interlocked.Exchange(ref job.DownloadedBytes, 0);
+                job.TotalBytes = remote.Length; job.ETag = remote.ETag; job.LastModified = remote.LastModified;
+                job.SupportsRanges = remote.Ranges;
+                job.SegmentCount = remote.Ranges && remote.Length >= 2 * 1024 * 1024 ? Settings.ConnectionsPerFile : 1;
+            }
+            job.Url = uri.AbsoluteUri; job.Referrer = referrer; job.BrowserRequestId = null;
+            job.Error = null; job.State = DownloadState.Paused;
+            SaveLocked();
+            if (PersistenceError != null) throw new IOException(PersistenceError);
+            return retained;
+        }
+    }
+
     private void Tick(object? state)
     {
         lock (_gate)

@@ -9,6 +9,36 @@ namespace Fastdown.App;
 
 public partial class MainWindow
 {
+    private void RefreshLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (Selected is not { } job) return;
+        if (job.IsVideoPage || job.State is not (DownloadState.Paused or DownloadState.Failed))
+        { Notify("Doğrudan dosya indirmesini duraklat; ardından bağlantıyı yenile."); return; }
+        RefreshLinkOverlay.Tag = job;
+        RefreshLinkTitle.Text = job.FileName;
+        RefreshLinkInput.Text = job.Url;
+        RefreshLinkRestart.IsChecked = false;
+        RefreshLinkError.Text = "";
+        RefreshLinkOverlay.Visibility = Visibility.Visible;
+        RefreshLinkInput.Focus(); RefreshLinkInput.SelectAll();
+    }
+    private void CancelRefreshLink_Click(object sender, RoutedEventArgs e) => RefreshLinkOverlay.Visibility = Visibility.Collapsed;
+    private async void SaveRefreshLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (RefreshLinkOverlay.Tag is not DownloadJob job) return;
+        try
+        {
+            RefreshLinkOverlay.IsEnabled = false;
+            var retained = await _manager.RefreshLinkAsync(job, RefreshLinkInput.Text, RefreshLinkRestart.IsChecked == true, _lifetime.Token);
+            _manager.Resume(job);
+            RefreshLinkOverlay.Visibility = Visibility.Collapsed;
+            Refresh(); Notify(retained ? "Bağlantı yenilendi. İndirme kaldığı yerden sürüyor." : "Bağlantı yenilendi. İndirme baştan başlatıldı.");
+        }
+        catch (OperationCanceledException) { if (!_closing) RefreshLinkError.Text = "Bağlantı kontrolü zaman aşımına uğradı; tekrar dene."; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.IO.IOException or System.IO.InvalidDataException or System.Net.Http.HttpRequestException or UnauthorizedAccessException)
+        { RefreshLinkError.Text = ex.Message; }
+        finally { RefreshLinkOverlay.IsEnabled = true; }
+    }
     private Point _dragStart;
     private DownloadJob? _dragJob;
     private static ListBoxItem? FindRow(DependencyObject? element)

@@ -1,3 +1,7 @@
+## 1.7.4 — Bağlantı yenileme
+
+Duraklatılmış veya hatalı doğrudan dosya indirmesine sağ tıkla → **Bağlantıyı yenile…**. Yeni dosya adresini girip **Kaydet ve sürdür** düğmesine bas. Aynı sunucuda boyut, devam desteği ve güçlü ETag eşleşirse parçalar korunur. Doğrulanamayan veya farklı sunucudaki dosya için **Baştan indir** kutusunu seç; aksi halde eski bağlantı ve parçalar korunur. Web sayfaları/yayın listeleri reddedilir. Video sayfası indirmeleri bu özelliği kullanmaz.
+
 ## 1.7.3 — İndirme konumu
 
 Ana ekrandaki **Konumu değiştir…** düğmesiyle varsayılan indirme klasörünü seçebilirsin. Seçim kalıcıdır ve tarayıcıdan aktarılanlar dahil yeni indirmelere uygulanır. Mevcut indirmelerin konumu korunur. **Klasörü aç** düğmesi seçili klasörü açar; tek bir indirme için Yeni indirme ekranında farklı bir klasör seçebilirsin.

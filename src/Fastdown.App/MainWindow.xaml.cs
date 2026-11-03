@@ -90,7 +90,7 @@ public partial class MainWindow : Window
         }
         if (screen == "settings") Settings_Click(this, new RoutedEventArgs());
         if (screen == "updates") { Settings_Click(this, new RoutedEventArgs()); UpdateLayout(); SettingsScroll.ScrollToEnd(); }
-        if (screen is "queue" or "speed")
+        if (screen is "queue" or "speed" or "renew")
         {
             foreach (var (name, limit) in new[] { ("Tatil videosu.mp4", 1024L * 1024), ("Proje dosyaları.zip", 0L), ("Podcast.m4a", 512L * 1024) })
             {
@@ -99,6 +99,7 @@ public partial class MainWindow : Window
             }
             _filter = "queued"; PageTitle.Text = "Sırada bekleyen"; Refresh(); DownloadList.SelectedIndex = 0;
             if (screen == "speed") JobSpeed_Click(this, new RoutedEventArgs());
+            if (screen == "renew") { Selected!.State = DownloadState.Paused; RefreshLink_Click(this, new RoutedEventArgs()); }
         }
         if (screen == "compact") { Width = MinWidth; Height = MinHeight; }
     }
