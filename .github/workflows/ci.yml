@@ -18,6 +18,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install chromium
       - run: dotnet build src/Fastdown.App/Fastdown.App.csproj -c Release
+      - run: dotnet run --project tests/Fastdown.App.Tests/Fastdown.App.Tests.csproj -c Release
       - run: npm test
       - name: Install official video tools
         shell: pwsh

@@ -36,7 +36,6 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _videoScan;
     private sealed record VideoChoice(int Height, string Label);
     private sealed record OutputChoice(string Format, string Label);
-    private sealed record AfterChoice(CompletionAction Value, string Label);
     private string OutputFormat => (VideoFormatInput.SelectedItem as OutputChoice)?.Format ?? "mp4";
 
     public MainWindow(string dataDirectory, bool enableBrowser = true)
@@ -44,11 +43,10 @@ public partial class MainWindow : Window
         _manager = new DownloadManager(dataDirectory, schedulerEnabled: enableBrowser);
         _completionEnabled = enableBrowser;
         _completed.UnionWith(_manager.Snapshot().Where(j => j.State == DownloadState.Completed).Select(j => j.Id));
-        _notifier = new CompletionNotifier(() => { if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate(); });
+        _notifier = new CompletionNotifier(folder => Dispatcher.Invoke(() => OpenFolder(folder)));
         InitializeComponent();
         VideoFormatInput.ItemsSource = new[] { new OutputChoice("mp4", "MP4 · Video + ses"), new OutputChoice("mkv", "MKV · Video + ses"), new OutputChoice("mp3", "MP3 · Sadece ses"), new OutputChoice("m4a", "M4A · Sadece ses") };
         VideoFormatInput.SelectedIndex = 0;
-        CompletionActionInput.ItemsSource = new[] { new AfterChoice(CompletionAction.None, "Bir şey yapma"), new AfterChoice(CompletionAction.OpenFolder, "Dosyanın klasörünü aç"), new AfterChoice(CompletionAction.OpenDocument, "Medya / belge dosyasını aç") };
         DownloadList.ItemsSource = _rows;
         _initialized = true;
         SizeChanged += (_, _) => UpdateEmptyLayout();
@@ -65,7 +63,6 @@ public partial class MainWindow : Window
         {
             Notify("Tarayıcıdan eklendi: " + reply.FileName);
             Refresh();
-            if (request.Focus) { if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate(); }
         });
         return reply;
     }
@@ -114,9 +111,7 @@ public partial class MainWindow : Window
             foreach (var job in jobs.Where(j => j.State == DownloadState.Completed && !_completed.Contains(j.Id)))
             {
                 _completed.Add(job.Id);
-                if (_manager.Settings.NotifyOnComplete) { try { _notifier.Show(job.FileName); } catch (Exception ex) when (ex is Win32Exception or ArgumentException) { Notify("İndirme tamamlandı: " + job.FileName); } }
-                if (_manager.Settings.CompletionAction == CompletionAction.OpenFolder) OpenFolder(job.DirectoryPath);
-                else if (_manager.Settings.CompletionAction == CompletionAction.OpenDocument && ShutdownCountdown.CanOpenDocument(job.TargetPath)) TryShell(() => Process.Start(new ProcessStartInfo(job.TargetPath) { UseShellExecute = true }));
+                if (_manager.Settings.NotifyOnComplete) { try { _notifier.Show(job.FileName, job.DirectoryPath); } catch (Exception ex) when (ex is Win32Exception or ArgumentException) { Notify("İndirme tamamlandı: " + job.FileName); } }
             }
             var power = _shutdown.Tick(jobs, DateTimeOffset.Now);
             ShutdownBanner.Visibility = power.Seconds.HasValue ? Visibility.Visible : Visibility.Collapsed;
@@ -362,7 +357,6 @@ public partial class MainWindow : Window
         ConnectionsSlider.Value = _manager.Settings.ConnectionsPerFile;
         SpeedInput.Text = (_manager.Settings.SpeedLimitBytes / 1024).ToString(CultureInfo.InvariantCulture);
         NotifyCheck.IsChecked = _manager.Settings.NotifyOnComplete;
-        CompletionActionInput.SelectedValue = _manager.Settings.CompletionAction;
         ShutdownCheck.IsChecked = _shutdown.Armed;
         AutoUpdateCheck.IsChecked = _manager.Settings.AutoUpdate;
         SettingsError.Text = "";
@@ -386,7 +380,6 @@ public partial class MainWindow : Window
             await _manager.SetTransferSettingsAsync(kb * 1024, (int)ConcurrentSlider.Value, (int)ConnectionsSlider.Value);
             _manager.Settings.AutoUpdate = AutoUpdateCheck.IsChecked == true;
             _manager.Settings.NotifyOnComplete = NotifyCheck.IsChecked == true;
-            _manager.Settings.CompletionAction = CompletionActionInput.SelectedValue is CompletionAction action ? action : CompletionAction.None;
             if (ShutdownCheck.IsChecked == true && !_shutdown.Armed) { _shutdown.Arm(); _shutdown.Tick(_manager.Snapshot(), DateTimeOffset.Now); }
             else if (ShutdownCheck.IsChecked != true) _shutdown.Cancel();
             _manager.SaveSettings();

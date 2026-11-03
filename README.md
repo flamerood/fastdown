@@ -1,3 +1,7 @@
+## 1.7.5 — Sessiz indirme ve bildirimden klasör açma
+
+İndirme eklenince veya tamamlanınca Fastdown pencereyi öne getirmez. Tarayıcının başlattığı uygulama simge durumunda açılır. Tamamlanma bildirimine tıkladığında o dosyanın kaydedildiği klasör açılır; birden çok bildirim kendi klasörünü korur. Tamamlanınca dosya/klasör kendiliğinden açılmaz. Windows bildirimlerini Ayarlar'dan açıp kapatabilirsin.
+
 ## 1.7.4 — Bağlantı yenileme
 
 Duraklatılmış veya hatalı doğrudan dosya indirmesine sağ tıkla → **Bağlantıyı yenile…**. Yeni dosya adresini girip **Kaydet ve sürdür** düğmesine bas. Aynı sunucuda boyut, devam desteği ve güçlü ETag eşleşirse parçalar korunur. Doğrulanamayan veya farklı sunucudaki dosya için **Baştan indir** kutusunu seç; aksi halde eski bağlantı ve parçalar korunur. Web sayfaları/yayın listeleri reddedilir. Video sayfası indirmeleri bu özelliği kullanmaz.

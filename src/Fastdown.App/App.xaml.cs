@@ -22,6 +22,7 @@ public partial class App : Application
             var legacy = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Akis");
             var data = preview ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(e.Args[1]))!, "preview-data") : !File.Exists(Path.Combine(preferred, "library.json")) && File.Exists(Path.Combine(legacy, "library.json")) ? legacy : preferred;
             var window = new MainWindow(data, enableBrowser: !preview);
+            if (e.Args.Contains("--browser")) { window.ShowActivated = false; window.WindowState = WindowState.Minimized; }
             MainWindow = window;
             window.Show();
             if (preview) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
