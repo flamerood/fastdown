@@ -8,7 +8,7 @@ namespace Fastdown.Core;
 public sealed record VideoInfo(string Title, int[] Heights);
 
 /// <summary>Resolves a page again at download time so expiring stream URLs never become saved jobs.</summary>
-public sealed class VideoDownloader(string partsRoot, string? toolsDirectory = null)
+public sealed class VideoDownloader(string partsRoot, string? toolsDirectory = null) : IVideoDownloader
 {
     private readonly string _tools = Path.GetFullPath(toolsDirectory ?? Path.Combine(AppContext.BaseDirectory, "tools"));
     private readonly string _parts = Path.GetFullPath(partsRoot);

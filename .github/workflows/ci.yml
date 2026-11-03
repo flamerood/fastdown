@@ -24,7 +24,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/Install-VideoTools.ps1
-      - run: dotnet run --project tests/Fastdown.Tests/Fastdown.Tests.csproj -c Release -- --video-suite
+      - run: dotnet run --project tests/Fastdown.Tests/Fastdown.Tests.csproj -c Release -- --video-suite --speed-suite
       - name: Prepare native bridge for isolated browser tests
         shell: pwsh
         run: |

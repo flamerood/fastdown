@@ -272,6 +272,12 @@ await Test("An active HTTP download responds to a changed limit without restarti
 await Test("Updates reject downgrades, preview versions, foreign URLs and missing hashes", UpdateTests.Metadata);
 await Test("Update download validates SHA256, reuses a verified cache and rejects later tampering", ()=>UpdateTests.Integrity(Area("updates")));
 await Test("Corrupt and cancelled updates never leave an installable file", ()=>UpdateTests.Corruption(Area("bad-updates")));
+await Test("Interrupted update download resumes across a new updater instance and verifies SHA256", ()=>UpdateTests.Resume(Area("resume-update")));
+await Test("Update resume safely handles ignored ranges and a complete pending file", ()=>UpdateTests.IgnoredRange(Area("ignored-update-range")));
+await Test("An incorrect update resume offset is rejected without an installable file", ()=>UpdateTests.BadResume(Area("bad-update-offset")));
+await Test("Failed update checks retry promptly and successful checks reset backoff", UpdateTests.RetrySchedule);
+await Test("Video bandwidth uses active jobs, rebalances after queue changes and respects user pause", ()=>VideoBudgetTests.Run(Area("video-budget"),server.Url+"range"));
+if(args.Contains("--speed-suite"))await Test("Real HTTP 5000/12000 KB limits, per-file/aggregate budgets and live unlimited transitions",async()=>{await using var speed=new SpeedTests();await speed.Run(Area("speed-matrix"));});
 
 await Test("404 is reported, retriable and removable", async () =>
 {

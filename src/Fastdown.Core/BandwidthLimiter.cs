@@ -19,8 +19,10 @@ internal sealed class BandwidthLimiter(Func<long> getLimit)
                 if (limit != _last) { _next = now; _last = limit; }
                 if (limit <= 0) return;
                 var delay = _next - now;
-                if (delay <= 0) { _next = now + bytes / (double)limit; return; }
-                await Task.Delay(TimeSpan.FromSeconds(Math.Min(delay, .15)), token);
+                // Preserve elapsed credit after a coarse Windows timer wakes late.
+                // Limit idle credit to 50 ms so waking/resuming cannot cause an unbounded burst.
+                if (delay <= 0) { _next = Math.Max(_next, now - .05) + bytes / (double)limit; return; }
+                await Task.Delay(TimeSpan.FromSeconds(Math.Clamp(delay, .002, .15)), token);
             }
         }
         finally { _gate.Release(); }

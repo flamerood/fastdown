@@ -52,31 +52,51 @@ public sealed class UpdateService(HttpClient http)
 
     public async Task<string> DownloadAsync(AppUpdate update, string directory, IProgress<double>? progress, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, $"Fastdown-Setup-{update.Version}.exe");
         if (await VerifyAsync(update, path, token)) return path;
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".partial";
+        var temporary = path + "." + update.Sha256 + ".partial";
+        var retained = File.Exists(temporary) ? new FileInfo(temporary).Length : 0;
+        if (retained == update.Size && await VerifyAsync(update, temporary, token)) { File.Move(temporary, path, true); return path; }
+        if (retained >= update.Size) { File.Delete(temporary); retained = 0; }
         try
         {
-            using var response = await http.GetAsync(update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, token);
+            using var request = new HttpRequestMessage(HttpMethod.Get, update.DownloadUrl);
+            if (retained > 0) request.Headers.Range = new RangeHeaderValue(retained, null);
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
             response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength is long length && length != update.Size) throw new InvalidDataException("Kurulum dosyası boyutu eşleşmedi.");
-            await using (var input = await response.Content.ReadAsStreamAsync(token))
-            await using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, true))
+            if (response.StatusCode == System.Net.HttpStatusCode.PartialContent)
             {
-                var buffer = new byte[131072]; long received = 0; int read;
-                while ((read = await input.ReadAsync(buffer, token)) > 0)
+                var range = response.Content.Headers.ContentRange;
+                if (range?.From != retained || range.To != update.Size - 1 || range.Length != update.Size) throw new InvalidDataException("Güncellemenin devam aralığı doğrulanamadı.");
+            }
+            else retained = 0; // A server that ignores Range must replace, never append to, the partial file.
+            if (response.Content.Headers.ContentLength is long length && length != update.Size - retained) throw new InvalidDataException("Kurulum dosyası boyutu eşleşmedi.");
+            progress?.Report(retained * 100.0 / update.Size);
+            await using (var input = await response.Content.ReadAsStreamAsync(token))
+            await using (var output = new FileStream(temporary, retained > 0 ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None, 131072, true))
+            {
+                var buffer = new byte[131072]; long received = retained; int read;
+                using var idle = CancellationTokenSource.CreateLinkedTokenSource(token);
+                while (true)
                 {
+                    idle.CancelAfter(TimeSpan.FromSeconds(60));
+                    read = await input.ReadAsync(buffer, idle.Token);
+                    idle.CancelAfter(Timeout.InfiniteTimeSpan);
+                    if (read == 0) break;
                     received += read;
                     if (received > update.Size) throw new InvalidDataException("Kurulum dosyası beklenen boyutu aştı.");
                     await output.WriteAsync(buffer.AsMemory(0, read), token);
                     progress?.Report(received * 100.0 / update.Size);
                 }
             }
+            if (new FileInfo(temporary).Length < update.Size) throw new IOException("Güncelleme indirmesi yarıda kaldı; sonraki denemede sürdürülecek.");
             if (!await VerifyAsync(update, temporary, token)) throw new InvalidDataException("Güncelleme doğrulanamadı; kurulum başlatılmadı.");
             File.Move(temporary, path, true);
             return path;
         }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        catch (InvalidDataException) { if (File.Exists(temporary)) File.Delete(temporary); throw; }
+        // Cancellation, process shutdown and transient transport failures retain hash-scoped partial data.
     }
 }

@@ -29,6 +29,7 @@ public sealed class DownloadJob
     public long DownloadedBytes;
     [JsonIgnore] public string? Stage { get; set; }
     [JsonIgnore] public double BytesPerSecond { get; set; }
+    [JsonIgnore] public long ActiveSpeedLimitBytes { get; internal set; }
     [JsonIgnore] public string TargetPath => Path.Combine(DirectoryPath, FileName);
     [JsonIgnore] public string Category => Path.GetExtension(FileName).ToLowerInvariant() switch
     {

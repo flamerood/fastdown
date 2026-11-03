@@ -107,7 +107,7 @@ public partial class MainWindow : Window
     {
         if (!_initialized) return;
         var jobs = _manager.Snapshot();
-        if (_completionEnabled && _manager.Settings.AutoUpdate && !_updateBusy && DateTime.UtcNow >= _nextUpdateCheck) _ = CheckUpdatesAsync(false);
+        if (_completionEnabled && _manager.Settings.AutoUpdate && !_updateBusy && DateTimeOffset.UtcNow >= _updateSchedule.NextCheck) _ = CheckUpdatesAsync(false);
         if (_completionEnabled)
         {
             foreach (var job in jobs.Where(j => j.State == DownloadState.Completed && !_completed.Contains(j.Id)))
@@ -429,7 +429,8 @@ public sealed class DownloadRow(DownloadJob job) : INotifyPropertyChanged
     public double Progress => Job.TotalBytes > 0 ? Math.Clamp(Interlocked.Read(ref Job.DownloadedBytes) * 100.0 / Job.TotalBytes.Value, 0, 100) : Job.State == DownloadState.Completed ? 100 : 0;
     public string PercentLabel => Job.TotalBytes.HasValue ? $"{Progress:0}%" : "";
     public string SizeLabel => Job.State == DownloadState.Completed ? Format.Bytes(Job.TotalBytes ?? 0) + "  ·  " + Job.Category : Format.Bytes(Interlocked.Read(ref Job.DownloadedBytes)) + " / " + (Job.TotalBytes.HasValue ? Format.Bytes(Job.TotalBytes.Value) : "Boyut bekleniyor");
-    public string StateLabel => (Job.State switch { DownloadState.Queued => "Sırada", DownloadState.Downloading => "İndiriliyor", DownloadState.Paused => "Duraklatıldı", DownloadState.Completed => "Tamamlandı", _ => "Yeniden dene" }) + (Job.SpeedLimitBytes > 0 && Job.State != DownloadState.Completed ? " · " + Format.Bytes(Job.SpeedLimitBytes) + "/sn" : "");
+    private long VisibleLimit => Job.IsVideoPage && Job.State == DownloadState.Downloading ? Job.ActiveSpeedLimitBytes : Job.SpeedLimitBytes;
+    public string StateLabel => (Job.State switch { DownloadState.Queued => "Sırada", DownloadState.Downloading => "İndiriliyor", DownloadState.Paused => "Duraklatıldı", DownloadState.Completed => "Tamamlandı", _ => "Yeniden dene" }) + (VisibleLimit > 0 && Job.State != DownloadState.Completed ? " · " + Format.Bytes(VisibleLimit) + "/sn" : "");
     public Brush StateBrush => new SolidColorBrush((Color)ColorConverter.ConvertFromString(Job.State switch { DownloadState.Completed or DownloadState.Downloading => "#99F0BF", DownloadState.Failed => "#EBA39E", DownloadState.Paused => "#D5BE88", _ => "#9DAABA" }));
     public Brush IconBackground => new SolidColorBrush((Color)ColorConverter.ConvertFromString(Job.Category switch { "Video" => "#2D2841", "Müzik" => "#3C2937", "Arşiv" => "#3C3424", "Belge" => "#243440", _ => "#25392F" }));
     public Brush IconForeground => new SolidColorBrush((Color)ColorConverter.ConvertFromString(Job.Category switch { "Video" => "#C0ACF7", "Müzik" => "#E9A6CA", "Arşiv" => "#E5C580", "Belge" => "#9CCBEB", _ => "#A5DEB9" }));

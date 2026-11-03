@@ -69,6 +69,9 @@ public partial class MainWindow
         if (Selected == null) return;
         JobSpeedTitle.Text = Selected.FileName;
         JobSpeedInput.Text = (Selected.SpeedLimitBytes / 1024).ToString(CultureInfo.InvariantCulture);
+        JobSpeedHint.Text = _manager.Settings.SpeedLimitBytes > 0
+            ? $"Toplam sınır: {_manager.Settings.SpeedLimitBytes / 1024} KB/sn. Dosya sınırıyla birlikte daha düşük olan bütçe uygulanır. Video indirmesi yeni sınırla sürdürülür."
+            : "Toplam hız sınırı yok. Buradaki sınır yalnızca bu dosyayı etkiler. Video indirmesi yeni sınırla sürdürülür.";
         JobSpeedOverlay.Tag = Selected;
         JobSpeedError.Text = ""; JobSpeedOverlay.Visibility = Visibility.Visible;
         JobSpeedInput.Focus(); JobSpeedInput.SelectAll();
