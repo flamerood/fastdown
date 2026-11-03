@@ -286,6 +286,26 @@ public partial class MainWindow : Window
     private void AddFolder_Click(object sender, RoutedEventArgs e) => PickFolder(FolderInput);
     private void SettingsFolder_Click(object sender, RoutedEventArgs e) => PickFolder(SettingsFolder);
     private void OpenDownloads_Click(object sender, RoutedEventArgs e) => OpenFolder(_manager.Settings.DownloadDirectory);
+    private void ChangeDownloadFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new OpenFolderDialog { Title = "Yeni indirmeler için klasör seç", Multiselect = false };
+            if (Directory.Exists(_manager.Settings.DownloadDirectory)) dialog.InitialDirectory = _manager.Settings.DownloadDirectory;
+            if (dialog.ShowDialog(this) != true) return;
+            var directory = Path.GetFullPath(dialog.FolderName);
+            Directory.CreateDirectory(directory);
+            _manager.Settings.DownloadDirectory = directory;
+            _manager.SaveSettings();
+            if (_manager.PersistenceError != null) throw new IOException(_manager.PersistenceError);
+            SettingsFolder.Text = directory;
+            FolderInput.Text = directory;
+            ChangeDownloadFolderButton.ToolTip = directory;
+            Notify("İndirme konumu kaydedildi. Yeni indirmeler: " + directory);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        { Notify("İndirme konumu kaydedilemedi: " + ex.Message); }
+    }
     private void BrowserSetup_Click(object sender, RoutedEventArgs e)
     {
         OpenFolder(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "extension")));

@@ -1,3 +1,7 @@
+## 1.7.3 — İndirme konumu
+
+Ana ekrandaki **Konumu değiştir…** düğmesiyle varsayılan indirme klasörünü seçebilirsin. Seçim kalıcıdır ve tarayıcıdan aktarılanlar dahil yeni indirmelere uygulanır. Mevcut indirmelerin konumu korunur. **Klasörü aç** düğmesi seçili klasörü açar; tek bir indirme için Yeni indirme ekranında farklı bir klasör seçebilirsin.
+
 # Fastdown
 
 IDM'den esinlenen, Türkçe arayüzlü Windows indirme yöneticisi. WPF ve .NET 10 ile geliştirilmiştir. Harici NuGet paketine ihtiyaç duymaz.
