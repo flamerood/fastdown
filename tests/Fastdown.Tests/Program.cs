@@ -284,10 +284,10 @@ await Test("404 is reported, retriable and removable", async () =>
     var folder = Area("error");
     await using var manager = new DownloadManager(Path.Combine(folder, "data"));
     var job = manager.Add(server.Url + "missing", "missing.bin", folder);
-    await WaitUntil(() => job.State == DownloadState.Failed);
+    await WaitUntil(() => job.State == DownloadState.Failed && job.Error != null);
     Assert(job.Error?.Contains("404") == true, "Missing useful HTTP error");
     manager.Resume(job);
-    await WaitUntil(() => job.State == DownloadState.Failed);
+    await WaitUntil(() => job.State == DownloadState.Failed && job.Error != null);
     await manager.RemoveAsync(job);
     Assert(manager.Snapshot().Length == 0, "Failed job was not removed");
 });
